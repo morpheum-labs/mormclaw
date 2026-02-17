@@ -8,9 +8,9 @@
 // Already-paired tokens are persisted in config so restarts don't require
 // re-pairing.
 
+use parking_lot::Mutex;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::sync::Mutex;
 use std::time::Instant;
 
 /// Maximum failed pairing attempts before lockout.
@@ -28,7 +28,7 @@ pub struct PairingGuard {
     /// Whether pairing is required at all.
     require_pairing: bool,
     /// One-time pairing code (generated on startup, consumed on first pair).
-    pairing_code: Option<String>,
+    pairing_code: Mutex<Option<String>>,
     /// Set of SHA-256 hashed bearer tokens (persisted across restarts).
     paired_tokens: Mutex<HashSet<String>>,
     /// Brute-force protection: failed attempt counter + lockout time.
@@ -62,15 +62,15 @@ impl PairingGuard {
         };
         Self {
             require_pairing,
-            pairing_code: code,
+            pairing_code: Mutex::new(code),
             paired_tokens: Mutex::new(tokens),
             failed_attempts: Mutex::new((0, None)),
         }
     }
 
     /// The one-time pairing code (only set when no tokens exist yet).
-    pub fn pairing_code(&self) -> Option<&str> {
-        self.pairing_code.as_deref()
+    pub fn pairing_code(&self) -> Option<String> {
+        self.pairing_code.lock().clone()
     }
 
     /// Whether pairing is required at all.
@@ -83,10 +83,7 @@ impl PairingGuard {
     pub fn try_pair(&self, code: &str) -> Result<Option<String>, u64> {
         // Check brute force lockout
         {
-            let attempts = self
-                .failed_attempts
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let attempts = self.failed_attempts.lock();
             if let (count, Some(locked_at)) = &*attempts {
                 if *count >= MAX_PAIR_ATTEMPTS {
                     let elapsed = locked_at.elapsed().as_secs();
@@ -97,32 +94,30 @@ impl PairingGuard {
             }
         }
 
-        if let Some(ref expected) = self.pairing_code {
-            if constant_time_eq(code.trim(), expected.trim()) {
-                // Reset failed attempts on success
-                {
-                    let mut attempts = self
-                        .failed_attempts
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    *attempts = (0, None);
+        {
+            let mut pairing_code = self.pairing_code.lock();
+            if let Some(ref expected) = *pairing_code {
+                if constant_time_eq(code.trim(), expected.trim()) {
+                    // Reset failed attempts on success
+                    {
+                        let mut attempts = self.failed_attempts.lock();
+                        *attempts = (0, None);
+                    }
+                    let token = generate_token();
+                    let mut tokens = self.paired_tokens.lock();
+                    tokens.insert(hash_token(&token));
+
+                    // Consume the pairing code so it cannot be reused
+                    *pairing_code = None;
+
+                    return Ok(Some(token));
                 }
-                let token = generate_token();
-                let mut tokens = self
-                    .paired_tokens
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                tokens.insert(hash_token(&token));
-                return Ok(Some(token));
             }
         }
 
         // Increment failed attempts
         {
-            let mut attempts = self
-                .failed_attempts
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            let mut attempts = self.failed_attempts.lock();
             attempts.0 += 1;
             if attempts.0 >= MAX_PAIR_ATTEMPTS {
                 attempts.1 = Some(Instant::now());
@@ -138,28 +133,19 @@ impl PairingGuard {
             return true;
         }
         let hashed = hash_token(token);
-        let tokens = self
-            .paired_tokens
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tokens = self.paired_tokens.lock();
         tokens.contains(&hashed)
     }
 
     /// Returns true if the gateway is already paired (has at least one token).
     pub fn is_paired(&self) -> bool {
-        let tokens = self
-            .paired_tokens
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tokens = self.paired_tokens.lock();
         !tokens.is_empty()
     }
 
     /// Get all paired token hashes (for persisting to config).
     pub fn tokens(&self) -> Vec<String> {
-        let tokens = self
-            .paired_tokens
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let tokens = self.paired_tokens.lock();
         tokens.iter().cloned().collect()
     }
 }
@@ -188,9 +174,17 @@ fn generate_code() -> String {
     }
 }
 
-/// Generate a cryptographically-adequate bearer token (hex-encoded).
+/// Generate a cryptographically-adequate bearer token with 256-bit entropy.
+///
+/// Uses `rand::thread_rng()` which is backed by the OS CSPRNG
+/// (/dev/urandom on Linux, BCryptGenRandom on Windows, SecRandomCopyBytes
+/// on macOS). The 32 random bytes (256 bits) are hex-encoded for a
+/// 64-character token, providing 256 bits of entropy.
 fn generate_token() -> String {
-    format!("zc_{}", uuid::Uuid::new_v4().as_simple())
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    format!("zc_{}", hex::encode(bytes))
 }
 
 /// SHA-256 hash a bearer token for storage. Returns lowercase hex.
