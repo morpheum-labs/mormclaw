@@ -66,7 +66,7 @@ pub async fn run(config: Config, host: String, port: u16) -> Result<()> {
             max_backoff,
             move || {
                 let cfg = heartbeat_cfg.clone();
-                async move { run_heartbeat_worker(cfg).await }
+                async move { Box::pin(run_heartbeat_worker(cfg)).await }
             },
         ));
     }
@@ -196,8 +196,16 @@ async fn run_heartbeat_worker(config: Config) -> Result<()> {
         for task in tasks {
             let prompt = format!("[Heartbeat Task] {task}");
             let temp = config.default_temperature;
-            if let Err(e) =
-                crate::agent::run(config.clone(), Some(prompt), None, None, temp, vec![]).await
+            if let Err(e) = crate::agent::run(
+                config.clone(),
+                Some(prompt),
+                None,
+                None,
+                temp,
+                vec![],
+                false,
+            )
+            .await
             {
                 crate::health::mark_component_error("heartbeat", e.to_string());
                 tracing::warn!("Heartbeat task failed: {e}");
@@ -209,14 +217,11 @@ async fn run_heartbeat_worker(config: Config) -> Result<()> {
 }
 
 fn has_supervised_channels(config: &Config) -> bool {
-    config.channels_config.telegram.is_some()
-        || config.channels_config.discord.is_some()
-        || config.channels_config.slack.is_some()
-        || config.channels_config.imessage.is_some()
-        || config.channels_config.matrix.is_some()
-        || config.channels_config.whatsapp.is_some()
-        || config.channels_config.email.is_some()
-        || config.channels_config.lark.is_some()
+    config
+        .channels_config
+        .channels_except_webhook()
+        .iter()
+        .any(|(_, ok)| *ok)
 }
 
 #[cfg(test)]
@@ -293,6 +298,58 @@ mod tests {
         config.channels_config.telegram = Some(crate::config::TelegramConfig {
             bot_token: "token".into(),
             allowed_users: vec![],
+            stream_mode: crate::config::StreamMode::default(),
+            draft_update_interval_ms: 1000,
+            interrupt_on_new_message: false,
+            mention_only: false,
+        });
+        assert!(has_supervised_channels(&config));
+    }
+
+    #[test]
+    fn detects_dingtalk_as_supervised_channel() {
+        let mut config = Config::default();
+        config.channels_config.dingtalk = Some(crate::config::schema::DingTalkConfig {
+            client_id: "client_id".into(),
+            client_secret: "client_secret".into(),
+            allowed_users: vec!["*".into()],
+        });
+        assert!(has_supervised_channels(&config));
+    }
+
+    #[test]
+    fn detects_mattermost_as_supervised_channel() {
+        let mut config = Config::default();
+        config.channels_config.mattermost = Some(crate::config::schema::MattermostConfig {
+            url: "https://mattermost.example.com".into(),
+            bot_token: "token".into(),
+            channel_id: Some("channel-id".into()),
+            allowed_users: vec!["*".into()],
+            thread_replies: Some(true),
+            mention_only: Some(false),
+        });
+        assert!(has_supervised_channels(&config));
+    }
+
+    #[test]
+    fn detects_qq_as_supervised_channel() {
+        let mut config = Config::default();
+        config.channels_config.qq = Some(crate::config::schema::QQConfig {
+            app_id: "app-id".into(),
+            app_secret: "app-secret".into(),
+            allowed_users: vec!["*".into()],
+        });
+        assert!(has_supervised_channels(&config));
+    }
+
+    #[test]
+    fn detects_nextcloud_talk_as_supervised_channel() {
+        let mut config = Config::default();
+        config.channels_config.nextcloud_talk = Some(crate::config::schema::NextcloudTalkConfig {
+            base_url: "https://cloud.example.com".into(),
+            app_token: "app-token".into(),
+            webhook_secret: None,
+            allowed_users: vec!["*".into()],
         });
         assert!(has_supervised_channels(&config));
     }
