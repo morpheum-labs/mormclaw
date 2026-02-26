@@ -44,7 +44,7 @@ env:
 jobs:
     prepare:
         name: Prepare Release Context
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: self-hosted
         outputs:
             release_ref: ${{ steps.vars.outputs.release_ref }}
             release_tag: ${{ steps.vars.outputs.release_tag }}
@@ -224,8 +224,13 @@ jobs:
             - name: Install cross-compilation toolchain (Linux)
               if: runner.os == 'Linux' && matrix.cross_compiler != ''
               run: |
-                  sudo apt-get update -qq
-                  sudo apt-get install -y ${{ matrix.cross_compiler }}
+                  if command -v sudo >/dev/null 2>&1; then
+                    sudo apt-get update -qq
+                    sudo apt-get install -y ${{ matrix.cross_compiler }}
+                  else
+                    apt-get update -qq
+                    apt-get install -y ${{ matrix.cross_compiler }}
+                  fi
 
             - name: Setup Android NDK
               if: matrix.android_ndk
@@ -238,8 +243,13 @@ jobs:
                   NDK_ROOT="${RUNNER_TEMP}/android-ndk"
                   NDK_HOME="${NDK_ROOT}/android-ndk-${NDK_VERSION}"
 
-                  sudo apt-get update -qq
-                  sudo apt-get install -y unzip
+                  if command -v sudo >/dev/null 2>&1; then
+                    sudo apt-get update -qq
+                    sudo apt-get install -y unzip
+                  else
+                    apt-get update -qq
+                    apt-get install -y unzip
+                  fi
 
                   mkdir -p "${NDK_ROOT}"
                   curl -fsSL "${NDK_URL}" -o "${RUNNER_TEMP}/${NDK_ZIP}"
@@ -328,7 +338,7 @@ jobs:
     verify-artifacts:
         name: Verify Artifact Set
         needs: [prepare, build-release]
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: self-hosted
         steps:
             - name: Download all artifacts
               uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
@@ -368,7 +378,7 @@ jobs:
         name: Publish Release
         if: needs.prepare.outputs.publish_release == 'true'
         needs: [prepare, verify-artifacts]
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: self-hosted
         timeout-minutes: 45
         steps:
             - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

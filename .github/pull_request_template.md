@@ -2,7 +2,7 @@
 
 Describe this PR in 2-5 bullets:
 
-- Base branch target (`dev` for normal contributions; `main` only for `dev` promotion):
+- Base branch target (`main`):
 - Problem:
 - Why it matters:
 - What changed:
@@ -28,8 +28,7 @@ Describe this PR in 2-5 bullets:
 - Related #
 - Depends on # (if stacked)
 - Supersedes # (if replacing older PR)
-- Linear issue key(s) (required, e.g. `RMN-123`):
-- Linear issue URL(s):
+- External tracking link(s) (optional):
 
 ## Supersede Attribution (required when `Supersedes #` is used)
 

@@ -19,7 +19,7 @@ env:
 jobs:
     changes:
         name: Detect Change Scope
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         outputs:
             docs_only: ${{ steps.scope.outputs.docs_only }}
             docs_changed: ${{ steps.scope.outputs.docs_changed }}
@@ -30,7 +30,28 @@ jobs:
         steps:
             - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
               with:
-                  fetch-depth: 0
+                  fetch-depth: 1
+
+            - name: Ensure diff base is available
+              shell: bash
+              env:
+                  BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+              run: |
+                  set -euo pipefail
+                  if [ -z "${BASE_SHA}" ]; then
+                    echo "BASE_SHA is empty; detect_change_scope will use fallback mode."
+                    exit 0
+                  fi
+
+                  if git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+                    echo "BASE_SHA already present: ${BASE_SHA}"
+                    exit 0
+                  fi
+
+                  echo "Fetching base commit ${BASE_SHA} for scope detection..."
+                  if ! git fetch --no-tags --depth=1 origin "${BASE_SHA}"; then
+                    echo "::warning::Unable to fetch BASE_SHA=${BASE_SHA}; detect_change_scope will use fallback mode."
+                  fi
 
             - name: Detect docs-only changes
               id: scope
@@ -44,7 +65,7 @@ jobs:
         name: Lint Gate (Format + Clippy + Strict Delta)
         needs: [changes]
         if: needs.changes.outputs.rust_changed == 'true'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         timeout-minutes: 25
         steps:
             - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -66,7 +87,7 @@ jobs:
         name: Test
         needs: [changes, lint]
         if: needs.changes.outputs.rust_changed == 'true' && needs.lint.result == 'success'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         timeout-minutes: 30
         steps:
             - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -81,7 +102,7 @@ jobs:
         name: Build (Smoke)
         needs: [changes]
         if: needs.changes.outputs.rust_changed == 'true'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         timeout-minutes: 20
 
         steps:
@@ -99,7 +120,7 @@ jobs:
         name: Docs-Only Fast Path
         needs: [changes]
         if: needs.changes.outputs.docs_only == 'true'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         steps:
             - name: Skip heavy jobs for docs-only change
               run: echo "Docs-only change detected. Rust lint/test/build skipped."
@@ -108,7 +129,7 @@ jobs:
         name: Non-Rust Fast Path
         needs: [changes]
         if: needs.changes.outputs.docs_only != 'true' && needs.changes.outputs.rust_changed != 'true'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         steps:
             - name: Skip Rust jobs for non-Rust change scope
               run: echo "No Rust-impacting files changed. Rust lint/test/build skipped."
@@ -117,12 +138,34 @@ jobs:
         name: Docs Quality
         needs: [changes]
         if: needs.changes.outputs.docs_changed == 'true'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         timeout-minutes: 15
         steps:
             - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
               with:
-                  fetch-depth: 0
+                  fetch-depth: 1
+
+            - name: Ensure diff base is available
+              shell: bash
+              env:
+                  BASE_SHA: ${{ needs.changes.outputs.base_sha }}
+              run: |
+                  set -euo pipefail
+                  if [ -z "${BASE_SHA}" ]; then
+                    echo "BASE_SHA is empty; docs gate will fallback to full-file lint."
+                    exit 0
+                  fi
+
+                  if git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+                    echo "BASE_SHA already present: ${BASE_SHA}"
+                    exit 0
+                  fi
+
+                  echo "Fetching base commit ${BASE_SHA} for docs diff..."
+                  if ! git fetch --no-tags --depth=1 origin "${BASE_SHA}"; then
+                    echo "::warning::Unable to fetch BASE_SHA=${BASE_SHA}; docs gate will fallback to full-file lint."
+                    exit 0
+                  fi
 
             - name: Markdown lint (changed lines only)
               env:
@@ -172,7 +215,7 @@ jobs:
         name: Lint Feedback
         if: github.event_name == 'pull_request'
         needs: [changes, lint, docs-quality]
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         permissions:
             contents: read
             pull-requests: write
@@ -198,7 +241,7 @@ jobs:
         name: Workflow Owner Approval
         needs: [changes]
         if: github.event_name == 'pull_request' && needs.changes.outputs.workflow_changed == 'true'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         permissions:
             contents: read
             pull-requests: read
@@ -219,7 +262,7 @@ jobs:
         name: License File Owner Guard
         needs: [changes]
         if: github.event_name == 'pull_request'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         permissions:
             contents: read
             pull-requests: read
@@ -237,7 +280,7 @@ jobs:
         name: CI Required Gate
         if: always()
         needs: [changes, lint, test, build, docs-only, non-rust, docs-quality, lint-feedback, workflow-owner-approval, license-file-owner-guard]
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: [self-hosted, Linux, X64]
         steps:
             - name: Enforce required status
               shell: bash
