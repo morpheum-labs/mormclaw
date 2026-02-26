@@ -47,3 +47,4 @@ docker tag "${IMAGE_NAME}:${TAG}" "${REMOTE_LATEST}"
 docker push "${REMOTE_LATEST}"
 
 echo "Published ${REMOTE_IMAGE} and ${REMOTE_LATEST}"
+echo "https://hub.docker.com/r/sorajez/mormclaw"
