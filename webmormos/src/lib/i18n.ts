@@ -188,6 +188,16 @@ const translations: Record<Locale, Record<string, string>> = {
     'auth.pairing_success': 'Pairing successful!',
     'auth.pairing_failed': 'Pairing failed. Please try again.',
     'auth.enter_code': 'Enter your pairing code to connect to the agent.',
+    'auth.totp_enrollment_subtitle':
+      'Scan the QR code with your authenticator app, then enter the 6-digit code to confirm.',
+    'auth.totp_login_subtitle': 'Enter the 6-digit code from your authenticator app.',
+    'auth.use_pairing_instead': 'Use pairing code instead',
+    'auth.setup_authenticator': 'Set up authenticator',
+    'auth.confirm': 'Confirm',
+    'auth.sign_in': 'Sign in',
+    'auth.loading_qr': 'Loading QR code...',
+    'auth.enrollment_remote_error':
+      'Enrollment must be done from this machine. Use pairing code instead, or run the server locally.',
 
     // Common
     'common.loading': 'Loading...',

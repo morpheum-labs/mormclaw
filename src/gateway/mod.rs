@@ -24,8 +24,10 @@ use crate::cost::CostTracker;
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::providers::{self, ChatMessage, Provider};
 use crate::runtime;
+use crate::security::otp::secret_file_path;
 use crate::security::pairing::{constant_time_eq, is_public_bind, PairingGuard};
-use crate::security::SecurityPolicy;
+use crate::security::secrets::SecretStore;
+use crate::security::{OtpValidator, SecurityPolicy};
 use crate::tools::traits::ToolSpec;
 use crate::tools::{self, Tool};
 use crate::util::truncate_with_ellipsis;
@@ -765,6 +767,7 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         println!("     Send: POST /pair with header X-Pairing-Code: {code}");
     } else if pairing.require_pairing() {
         println!("  🔒 Pairing: ACTIVE (bearer token required)");
+        println!("     Locked out? Run: zeroclaw pairing regenerate");
     } else {
         println!("  ⚠️  Pairing: DISABLED (all requests accepted)");
     }
@@ -851,6 +854,9 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
         .route("/health", get(handle_health))
         .route("/metrics", get(handle_metrics))
         .route("/pair", post(handle_pair))
+        .route("/pairing/regenerate", post(handle_pairing_regenerate))
+        .route("/auth/totp/enroll", get(handle_auth_totp_enroll))
+        .route("/auth/totp", post(handle_auth_totp))
         .route("/webhook", get(handle_webhook_usage).post(handle_webhook))
         .route("/whatsapp", get(handle_whatsapp_verify))
         .route("/whatsapp", post(handle_whatsapp_message))
@@ -938,12 +944,38 @@ pub async fn run_gateway(host: &str, port: u16, config: Config) -> Result<()> {
 
 /// GET /health — always public (no secrets leaked)
 async fn handle_health(State(state): State<AppState>) -> impl IntoResponse {
-    let body = serde_json::json!({
+    let require_pairing = state.pairing.require_pairing();
+    let mut body = serde_json::json!({
         "status": "ok",
         "paired": state.pairing.is_paired(),
-        "require_pairing": state.pairing.require_pairing(),
+        "require_pairing": require_pairing,
         "runtime": crate::health::snapshot_json(),
     });
+
+    // Add auth_mode when require_pairing is true (for TOTP vs pairing screen selection)
+    if require_pairing {
+        let config = state.config.lock();
+        let totp_enabled = config.gateway.totp_login_enabled;
+        let config_dir = config
+            .config_path
+            .parent()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        drop(config);
+
+        if totp_enabled {
+            let secret_exists = secret_file_path(&config_dir).exists();
+            let auth_mode = if secret_exists {
+                "totp"
+            } else {
+                "totp_enrollment"
+            };
+            body["auth_mode"] = serde_json::Value::String(auth_mode.to_string());
+        } else {
+            body["auth_mode"] = serde_json::Value::String("pairing".to_string());
+        }
+    }
+
     Json(body)
 }
 
@@ -1058,6 +1090,251 @@ async fn handle_pair(
                 "retry_after": lockout_secs
             });
             (StatusCode::TOO_MANY_REQUESTS, Json(err))
+        }
+    }
+}
+
+/// POST /pairing/regenerate — clear all tokens and generate a fresh pairing code.
+/// Only accepts requests from loopback (127.0.0.1, ::1) for security.
+async fn handle_pairing_regenerate(
+    State(state): State<AppState>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !is_loopback_request(Some(peer_addr), &headers, state.trust_forwarded_headers) {
+        tracing::warn!("🔐 Pairing regenerate rejected: not from loopback");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "Pairing regenerate is only allowed from localhost. Use: zeroclaw pairing regenerate"
+            })),
+        )
+            .into_response();
+    }
+
+    match state.pairing.regenerate_pairing_code() {
+        Some(code) => {
+            tracing::info!("🔐 Pairing code regenerated");
+            if let Err(err) = persist_pairing_tokens(state.config.clone(), &state.pairing).await {
+                tracing::error!("🔐 Regenerate succeeded but token persistence failed: {err:#}");
+                return (
+                    StatusCode::OK,
+                    Json(serde_json::json!({
+                        "pairing_code": code,
+                        "persisted": false,
+                        "message": "New code generated, but failed to persist to config. Check config path and write permissions."
+                    })),
+                )
+                    .into_response();
+            }
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "pairing_code": code,
+                    "persisted": true,
+                    "message": "Enter this code on the pairing screen to connect."
+                })),
+            )
+                .into_response()
+        }
+        None => (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Pairing is not required; regenerate not available."
+            })),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /auth/totp/enroll — return otpauth URI for QR (localhost only)
+async fn handle_auth_totp_enroll(
+    State(state): State<AppState>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !is_loopback_request(Some(peer_addr), &headers, state.trust_forwarded_headers) {
+        tracing::warn!("TOTP enroll rejected: not from loopback");
+        return (
+            StatusCode::FORBIDDEN,
+            Json(serde_json::json!({
+                "error": "Enrollment must be done from this machine (localhost). Use pairing code instead, or run the server locally."
+            })),
+        )
+            .into_response();
+    }
+
+    let (totp_enabled, config_dir, otp_config, secrets_encrypt) = {
+        let config = state.config.lock();
+        let dir = config
+            .config_path
+            .parent()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        (
+            config.gateway.totp_login_enabled,
+            dir,
+            config.security.otp.clone(),
+            config.secrets.encrypt,
+        )
+    };
+
+    if !totp_enabled {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "TOTP login is not enabled.",
+            })),
+        )
+            .into_response();
+    }
+
+    let store = SecretStore::new(&config_dir, secrets_encrypt);
+    match OtpValidator::from_config(&otp_config, &config_dir, &store) {
+        Ok((validator, _)) => {
+            let uri = validator.otpauth_uri();
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "otpauth_uri": uri,
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            tracing::error!("TOTP enroll failed: {e:#}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to load or create TOTP secret.",
+                })),
+            )
+                .into_response()
+        }
+    }
+}
+
+#[derive(serde::Deserialize)]
+struct AuthTotpBody {
+    code: Option<String>,
+}
+
+/// POST /auth/totp — exchange TOTP code for bearer token
+async fn handle_auth_totp(
+    State(state): State<AppState>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    body: Option<axum::Json<AuthTotpBody>>,
+) -> impl IntoResponse {
+    let (totp_enabled, config_dir, otp_config, secrets_encrypt) = {
+        let config = state.config.lock();
+        let enabled = config.gateway.totp_login_enabled;
+        let dir = config
+            .config_path
+            .parent()
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        (
+            enabled,
+            dir,
+            config.security.otp.clone(),
+            config.secrets.encrypt,
+        )
+    };
+
+    if !totp_enabled {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "TOTP login is not enabled.",
+            })),
+        )
+            .into_response();
+    }
+
+    let rate_key =
+        client_key_from_request(Some(peer_addr), &headers, state.trust_forwarded_headers);
+    if !state.rate_limiter.allow_pair(&rate_key) {
+        tracing::warn!("/auth/totp rate limit exceeded");
+        let err = serde_json::json!({
+            "error": "Too many requests. Please retry later.",
+            "retry_after": RATE_LIMIT_WINDOW_SECS,
+        });
+        return (StatusCode::TOO_MANY_REQUESTS, Json(err)).into_response();
+    }
+
+    let code = headers
+        .get("X-TOTP-Code")
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            body.as_ref()
+                .and_then(|b| b.code.as_deref())
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+        .unwrap_or("");
+
+    if code.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({
+                "error": "Missing TOTP code. Send X-TOTP-Code header or JSON body {\"code\": \"123456\"}.",
+            })),
+        )
+            .into_response();
+    }
+
+    let store = SecretStore::new(&config_dir, secrets_encrypt);
+    let (validator, _) = match OtpValidator::from_config(&otp_config, &config_dir, &store) {
+        Ok(v) => v,
+        Err(e) => {
+            tracing::error!("TOTP validator init failed: {e:#}");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Failed to load TOTP secret.",
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    match validator.validate(code) {
+        Ok(true) => {
+            let token = state.pairing.issue_token("totp");
+            if let Err(err) = persist_pairing_tokens(state.config.clone(), &state.pairing).await {
+                tracing::error!("TOTP login succeeded but token persistence failed: {err:#}");
+            }
+            (
+                StatusCode::OK,
+                Json(serde_json::json!({
+                    "token": token,
+                    "message": "Use Authorization: Bearer <token>",
+                })),
+            )
+                .into_response()
+        }
+        Ok(false) => {
+            tracing::warn!("TOTP login attempt with invalid code");
+            (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": "Invalid TOTP code",
+                })),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            tracing::error!("TOTP validation error: {e:#}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "error": "Validation failed.",
+                })),
+            )
+                .into_response()
         }
     }
 }

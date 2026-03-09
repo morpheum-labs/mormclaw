@@ -40,6 +40,7 @@ Last refreshed: **February 28, 2026**.
 ### 2) Command/Config References & Integrations
 
 - [reference/README.md](reference/README.md)
+- [api-paths-reference.md](api-paths-reference.md)
 - [commands-reference.md](commands-reference.md)
 - [cron-scheduling.md](cron-scheduling.md)
 - [providers-reference.md](providers-reference.md)
@@ -65,6 +66,8 @@ Last refreshed: **February 28, 2026**.
 ### 4) Security Design & Proposals
 
 - [security/README.md](security/README.md)
+- [design/totp-gateway-login-design.md](design/totp-gateway-login-design.md) — TOTP web login backend (proposal)
+- [design/totp-gateway-login-ui-design.md](design/totp-gateway-login-ui-design.md) — TOTP web login UI (proposal)
 - [security/official-channels-and-fraud-prevention.md](security/official-channels-and-fraud-prevention.md)
 - [agnostic-security.md](agnostic-security.md)
 - [frictionless-security.md](frictionless-security.md)

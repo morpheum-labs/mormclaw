@@ -983,6 +983,7 @@ fn canonical_provider_name(provider_name: &str) -> &str {
         "samba-nova" => "sambanova",
         "hf" => "huggingface",
         "llama.cpp" => "llamacpp",
+        "chatjimmy-cli" => "chatjimmy",
         _ => provider_name,
     }
 }
@@ -992,6 +993,7 @@ fn allows_unauthenticated_model_fetch(provider_name: &str) -> bool {
         canonical_provider_name(provider_name),
         "openrouter"
             | "ollama"
+            | "chatjimmy"
             | "llamacpp"
             | "sglang"
             | "vllm"
@@ -1615,6 +1617,7 @@ fn supports_live_model_fetch(provider_name: &str) -> bool {
             | "xai"
             | "together-ai"
             | "gemini"
+            | "chatjimmy"
             | "ollama"
             | "llamacpp"
             | "sglang"
@@ -1676,6 +1679,7 @@ fn models_endpoint_for_provider(provider_name: &str) -> Option<&'static str> {
             "siliconflow" => Some("https://api.siliconflow.cn/v1/models"),
             "nvidia" => Some("https://integrate.api.nvidia.com/v1/models"),
             "astrai" => Some("https://as-trai.com/v1/models"),
+            "chatjimmy" => Some("https://chatjimmy.ai/api/models"),
             "llamacpp" => Some("http://localhost:8080/v1/models"),
             "sglang" => Some("http://localhost:30000/v1/models"),
             "vllm" => Some("http://localhost:8000/v1/models"),
@@ -1964,7 +1968,7 @@ fn fetch_live_models_for_provider(
     let provider_name = canonical_provider_name(provider_name);
     let ollama_remote = provider_name == "ollama" && ollama_uses_remote_endpoint(provider_api_url);
     let api_key = if api_key.trim().is_empty() {
-        if provider_name == "ollama" && !ollama_remote {
+        if (provider_name == "ollama" && !ollama_remote) || provider_name == "chatjimmy" {
             None
         } else {
             resolve_provider_api_key_from_env(provider_name)
@@ -3464,7 +3468,7 @@ fn provider_has_env_api_key(provider_name: &str) -> bool {
 fn provider_supports_keyless_local_usage(provider_name: &str) -> bool {
     matches!(
         canonical_provider_name(provider_name),
-        "ollama" | "llamacpp" | "sglang" | "vllm" | "osaurus"
+        "ollama" | "chatjimmy" | "llamacpp" | "sglang" | "vllm" | "osaurus"
     )
 }
 
@@ -8386,6 +8390,8 @@ mod tests {
         assert!(supports_live_model_fetch("volcengine"));
         assert!(supports_live_model_fetch("doubao"));
         assert!(supports_live_model_fetch("ark"));
+        assert!(supports_live_model_fetch("chatjimmy"));
+        assert!(supports_live_model_fetch("chatjimmy-cli"));
         assert!(!supports_live_model_fetch("minimax-cn"));
         assert!(!supports_live_model_fetch("unknown-provider"));
     }
@@ -8641,6 +8647,14 @@ mod tests {
         assert_eq!(
             resolve_live_models_endpoint("venice", Some("http://localhost:9999/v1")),
             Some("https://api.venice.ai/api/v1/models".to_string())
+        );
+        assert_eq!(
+            resolve_live_models_endpoint("chatjimmy", None),
+            Some("https://chatjimmy.ai/api/models".to_string())
+        );
+        assert_eq!(
+            resolve_live_models_endpoint("chatjimmy-cli", None),
+            Some("https://chatjimmy.ai/api/models".to_string())
         );
         assert_eq!(resolve_live_models_endpoint("unknown-provider", None), None);
     }

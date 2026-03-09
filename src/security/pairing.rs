@@ -26,6 +26,11 @@ const FAILED_ATTEMPT_RETENTION_SECS: u64 = 900; // 15 min
 const FAILED_ATTEMPT_SWEEP_INTERVAL_SECS: u64 = 300; // 5 min
 /// Display length for stable paired-device IDs derived from token hash prefix.
 const DEVICE_ID_PREFIX_LEN: usize = 16;
+/// Minimum time the pairing code stays unchanged before allowing regeneration (anti-abuse).
+#[cfg(not(test))]
+const REGENERATE_COOLDOWN_SECS: u64 = 300; // 5 minutes
+#[cfg(test)]
+const REGENERATE_COOLDOWN_SECS: u64 = 1; // 1 second for tests
 
 /// Per-client failed attempt state with optional absolute lockout deadline.
 #[derive(Debug, Clone, Copy)]
@@ -88,6 +93,8 @@ pub struct PairingGuard {
     paired_device_meta: Arc<Mutex<HashMap<String, PairedDeviceMeta>>>,
     /// Brute-force protection: per-client failed attempt state + last sweep timestamp.
     failed_attempts: Arc<Mutex<(HashMap<String, FailedAttemptState>, Instant)>>,
+    /// When pairing code was last regenerated; used to enforce cooldown.
+    last_regenerate_at: Arc<Mutex<Option<Instant>>>,
 }
 
 impl PairingGuard {
@@ -125,6 +132,7 @@ impl PairingGuard {
             paired_tokens: Arc::new(Mutex::new(tokens)),
             paired_device_meta: Arc::new(Mutex::new(paired_device_meta)),
             failed_attempts: Arc::new(Mutex::new((HashMap::new(), Instant::now()))),
+            last_regenerate_at: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -319,6 +327,56 @@ impl PairingGuard {
                 .then_with(|| a.id.cmp(&b.id))
         });
         devices
+    }
+
+    /// Issue a bearer token for a given source (e.g. "totp"). Used by TOTP login flow.
+    /// Adds the token to paired_tokens and paired_device_meta, returns the plaintext token.
+    pub fn issue_token(&self, source: &str) -> String {
+        let token = generate_token();
+        let hashed_token = hash_token(&token);
+        {
+            let mut tokens = self.paired_tokens.lock();
+            tokens.insert(hashed_token.clone());
+        }
+        {
+            let mut metadata = self.paired_device_meta.lock();
+            metadata.insert(
+                hashed_token,
+                PairedDeviceMeta::fresh(Some(source.to_string())),
+            );
+        }
+        token
+    }
+
+    /// Regenerate the pairing code: clear all tokens and generate a fresh one-time code.
+    /// Enforces a 5-minute cooldown — within cooldown, returns the existing code without clearing.
+    /// Returns the code, or None if pairing is not required.
+    pub fn regenerate_pairing_code(&self) -> Option<String> {
+        if !self.require_pairing {
+            return None;
+        }
+        let now = Instant::now();
+        {
+            let last = self.last_regenerate_at.lock();
+            if let Some(ts) = *last {
+                if now.duration_since(ts).as_secs() < REGENERATE_COOLDOWN_SECS {
+                    return self.pairing_code();
+                }
+            }
+        }
+        {
+            let mut tokens = self.paired_tokens.lock();
+            tokens.clear();
+        }
+        self.paired_device_meta.lock().clear();
+        {
+            let mut code = self.pairing_code.lock();
+            let new_code = generate_code();
+            *code = Some(new_code.clone());
+            drop(code);
+        }
+        *self.last_regenerate_at.lock() = Some(now);
+        self.pairing_code()
     }
 
     /// Revoke a paired device by short ID (hash prefix) or full token hash.
@@ -586,6 +644,18 @@ mod tests {
             guard.pairing_code().is_some(),
             "revoke of final device should regenerate one-time pairing code"
         );
+    }
+
+    #[test]
+    async fn regenerate_pairing_code_enforces_cooldown() {
+        let guard = PairingGuard::new(true, &["zc_existing".into()]);
+        let code1 = guard.regenerate_pairing_code().unwrap();
+        let code2 = guard.regenerate_pairing_code().unwrap();
+        assert_eq!(code1, code2, "within cooldown, same code returned");
+
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let code3 = guard.regenerate_pairing_code().unwrap();
+        assert_ne!(code1, code3, "after cooldown, new code generated");
     }
 
     #[test]

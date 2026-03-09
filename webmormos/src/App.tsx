@@ -14,6 +14,9 @@ import Logs from './pages/Logs';
 import Doctor from './pages/Doctor';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { coerceLocale, setLocale, type Locale } from './lib/i18n';
+import { regeneratePairingCode } from './lib/api';
+import { EnrollmentScreen } from './components/auth/EnrollmentScreen';
+import { TotpLoginScreen } from './components/auth/TotpLoginScreen';
 
 const LOCALE_STORAGE_KEY = 'zeroclaw:locale';
 
@@ -35,6 +38,7 @@ function PairingDialog({ onPair }: { onPair: (code: string) => Promise<void> }) 
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,12 +53,36 @@ function PairingDialog({ onPair }: { onPair: (code: string) => Promise<void> }) 
     }
   };
 
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    setError('');
+    try {
+      const { pairing_code } = await regeneratePairingCode();
+      setCode(pairing_code);
+      await onPair(pairing_code);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Regenerate failed');
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
   return (
     <div className="pairing-shell min-h-screen flex items-center justify-center px-4">
       <div className="pairing-card w-full max-w-md rounded-2xl p-8">
         <div className="text-center mb-6">
           <h1 className="mb-2 text-2xl font-semibold tracking-[0.16em]">MormOS</h1>
-          <p className="text-sm text-[#9bb8e8]">Enter the one-time pairing code from your terminal</p>
+          <p className="text-sm text-[#9bb8e8] inline-flex items-center justify-center gap-2 flex-wrap">
+            Enter the one-time pairing code from your terminal
+            <button
+              type="button"
+              onClick={handleRegenerate}
+              disabled={loading || regenerating}
+              className="text-xs text-[#9bb8e8]/80 hover:text-[#9bb8e8] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {regenerating ? 'Regenerating...' : 'Regenerate code'}
+            </button>
+          </p>
         </div>
         <form onSubmit={handleSubmit}>
           <input
@@ -83,7 +111,15 @@ function PairingDialog({ onPair }: { onPair: (code: string) => Promise<void> }) 
 }
 
 function AppContent() {
-  const { isAuthenticated, loading, pair, logout } = useAuth();
+  const {
+    isAuthenticated,
+    loading,
+    authMode,
+    pair,
+    loginWithTotp,
+    logout,
+  } = useAuth();
+  const [forcePairing, setForcePairing] = useState(false);
   const [locale, setLocaleState] = useState<Locale>(() => {
     if (typeof window === 'undefined') {
       return 'en';
@@ -129,6 +165,25 @@ function AppContent() {
   }
 
   if (!isAuthenticated) {
+    if (forcePairing) {
+      return <PairingDialog onPair={pair} />;
+    }
+    if (authMode === 'totp_enrollment') {
+      return (
+        <EnrollmentScreen
+          onLogin={loginWithTotp}
+          onUsePairingInstead={() => setForcePairing(true)}
+        />
+      );
+    }
+    if (authMode === 'totp') {
+      return (
+        <TotpLoginScreen
+          onLogin={loginWithTotp}
+          onUsePairingInstead={() => setForcePairing(true)}
+        />
+      );
+    }
     return <PairingDialog onPair={pair} />;
   }
 

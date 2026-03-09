@@ -277,6 +277,11 @@ fn show_integration_info(config: &Config, name: &str) -> Result<()> {
             println!("    2. Pull a model: ollama pull llama3");
             println!("    3. Set provider to 'ollama' in config.toml");
         }
+        "ChatJimmy" => {
+            println!("  Setup:");
+            println!("    No API key required. Default provider: chatjimmy.");
+            println!("    Run: zeroclaw agent -m \"hello\"");
+        }
         "iMessage" => {
             println!("  Setup (macOS only):");
             println!("    Uses AppleScript bridge to send/receive iMessages.");

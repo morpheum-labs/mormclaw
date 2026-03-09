@@ -4,6 +4,7 @@ Structured reference index for commands, providers, channels, config, and integr
 
 ## Core References
 
+- Gateway API paths: [../api-paths-reference.md](../api-paths-reference.md)
 - Commands by workflow: [../commands-reference.md](../commands-reference.md)
 - Provider IDs / aliases / env vars: [../providers-reference.md](../providers-reference.md)
 - Channel setup + allowlists: [../channels-reference.md](../channels-reference.md)

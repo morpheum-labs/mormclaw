@@ -25,7 +25,7 @@ CLI commands for config inspection and modification:
 
 | Key | Default | Notes |
 |---|---|---|
-| `default_provider` | `openrouter` | provider ID or alias |
+| `default_provider` | `chatjimmy` | provider ID or alias |
 | `provider_api` | unset | Optional API mode for `custom:<url>` providers: `openai-chat-completions` or `openai-responses` |
 | `default_model` | `anthropic/claude-sonnet-4-6` | model routed through selected provider |
 | `default_temperature` | `0.7` | model temperature |
@@ -985,6 +985,7 @@ Environment overrides:
 | `host` | `127.0.0.1` | bind address |
 | `port` | `42617` | gateway listen port |
 | `require_pairing` | `true` | require pairing before bearer auth |
+| `totp_login_enabled` | `false` | offer TOTP login (enrollment or OTP input per auth mode) |
 | `allow_public_bind` | `false` | block accidental public exposure |
 
 ## `[gateway.node_control]` (experimental)

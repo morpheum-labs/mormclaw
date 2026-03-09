@@ -503,6 +503,18 @@ pub fn all_integrations() -> Vec<IntegrationEntry> {
             },
         },
         IntegrationEntry {
+            name: "ChatJimmy",
+            description: "chatjimmy.ai — Taalas HC1 (~17k tok/s, no auth)",
+            category: IntegrationCategory::AiModel,
+            status_fn: |c| {
+                if c.default_provider.as_deref() == Some("chatjimmy") {
+                    IntegrationStatus::Active
+                } else {
+                    IntegrationStatus::Available
+                }
+            },
+        },
+        IntegrationEntry {
             name: "Perplexity",
             description: "Sonar Pro, Sonar Reasoning Pro",
             category: IntegrationCategory::AiModel,

@@ -26,6 +26,7 @@ credential is not reused for fallback providers.
 
 | Canonical ID | Aliases | Local | Provider-specific env var(s) |
 |---|---|---:|---|
+| `chatjimmy` | `chatjimmy-cli` | No | (none; no auth) |
 | `openrouter` | — | No | `OPENROUTER_API_KEY` |
 | `anthropic` | — | No | `ANTHROPIC_OAUTH_TOKEN`, `ANTHROPIC_API_KEY` |
 | `openai` | — | No | `OPENAI_API_KEY` |
@@ -65,6 +66,22 @@ credential is not reused for fallback providers.
 | `vllm` | — | Yes | `VLLM_API_KEY` (optional) |
 | `osaurus` | — | Yes | `OSAURUS_API_KEY` (optional; defaults to `"osaurus"`) |
 | `nvidia` | `nvidia-nim`, `build.nvidia.com` | No | `NVIDIA_API_KEY` |
+
+### ChatJimmy Notes
+
+- Provider ID: `chatjimmy` (alias: `chatjimmy-cli`)
+- Base URL: `https://chatjimmy.ai`
+- Authentication: None required
+- Default model: `llama3.1-8B` (Taalas HC1 inference, ~17k tokens/sec)
+- API reference: [chatjimmy-cli docs](https://github.com/kichichifightclubx/chatjimmy-cli/blob/main/docs/02-api-reference.md)
+- **Limitations**: No native tool calling; input prefill limit ~6,064 tokens; temperature not supported (topK=8 fixed)
+
+```toml
+default_provider = "chatjimmy"
+default_model = "llama3.1-8B"
+```
+
+- Override endpoint with `api_url` for self-hosted ChatJimmy instances (if supported).
 
 ### Cursor (Headless CLI) Notes
 

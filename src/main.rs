@@ -372,6 +372,22 @@ Examples:
         open_dashboard: bool,
     },
 
+    /// Regenerate pairing code (no restart required)
+    #[command(long_about = "\
+Regenerate a new pairing code while the gateway is running.
+
+Calls the running gateway's /pairing/regenerate endpoint (localhost only).
+Use this when locked out of the web dashboard — no container restart needed.
+
+Examples:
+  zeroclaw pairing regenerate                    # default: http://127.0.0.1:42617
+  zeroclaw pairing regenerate -u http://localhost:42617
+  docker exec -it <container> zeroclaw pairing regenerate  # from inside container")]
+    Pairing {
+        #[command(subcommand)]
+        pairing_command: PairingCommands,
+    },
+
     /// Start long-running autonomous runtime (gateway + channels + heartbeat + scheduler)
     #[command(long_about = "\
 Start the long-running autonomous daemon.
@@ -676,6 +692,16 @@ Examples:
         /// Target shell
         #[arg(value_enum)]
         shell: CompletionShell,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum PairingCommands {
+    /// Clear all tokens and generate a fresh pairing code
+    Regenerate {
+        /// Gateway URL (default: http://127.0.0.1:42617)
+        #[arg(short, long, default_value = "http://127.0.0.1:42617")]
+        url: String,
     },
 }
 
@@ -1435,6 +1461,9 @@ async fn main() -> Result<()> {
             peripherals::handle_command(peripheral_command.clone(), &config).await
         }
 
+        Commands::Pairing { pairing_command } => {
+            handle_pairing_command(pairing_command, &config).await
+        }
         Commands::Config { config_command } => match config_command {
             ConfigCommands::Show => {
                 let mut json =
@@ -1964,6 +1993,45 @@ fn format_expiry(profile: &auth::profiles::AuthProfile) -> String {
         }
         None => "n/a".to_string(),
     }
+}
+
+async fn handle_pairing_command(pairing_command: PairingCommands, _config: &Config) -> Result<()> {
+    match pairing_command {
+        PairingCommands::Regenerate { url } => {
+            let base = url.trim_end_matches('/');
+            let endpoint = format!("{base}/pairing/regenerate");
+            let client = reqwest::Client::new();
+            let response = client
+                .post(&endpoint)
+                .send()
+                .await
+                .context("Failed to connect to gateway. Is it running?")?;
+
+            let status = response.status();
+            let body: serde_json::Value = response
+                .json()
+                .await
+                .context("Invalid JSON response from gateway")?;
+
+            if status.is_success() {
+                let code = body
+                    .get("pairing_code")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("???");
+                println!();
+                println!("  🔐 New pairing code:");
+                println!("     ┌──────────────┐");
+                println!("     │  {code}  │");
+                println!("     └──────────────┘");
+                println!("     Enter this code on the pairing screen to connect.");
+                println!();
+            } else {
+                let err = body.get("error").and_then(|v| v.as_str()).unwrap_or("Unknown error");
+                bail!("{err}");
+            }
+        }
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_lines)]

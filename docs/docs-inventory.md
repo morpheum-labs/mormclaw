@@ -70,6 +70,7 @@ Compatibility shims such as `docs/SUMMARY.<locale>.md` and `docs/vi/**` remain v
 |---|---|---|
 | `docs/one-click-bootstrap.md` | Current Guide | users/operators |
 | `docs/android-setup.md` | Current Guide | Android users/operators |
+| `docs/api-paths-reference.md` | Current Reference | users/operators |
 | `docs/commands-reference.md` | Current Reference | users/operators |
 | `docs/providers-reference.md` | Current Reference | users/operators |
 | `docs/channels-reference.md` | Current Reference | users/operators |

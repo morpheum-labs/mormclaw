@@ -18,6 +18,7 @@
 
 pub mod anthropic;
 pub mod backoff;
+pub mod chatjimmy;
 pub mod bedrock;
 pub mod compatible;
 pub mod copilot;
@@ -959,6 +960,7 @@ fn resolve_provider_credential(name: &str, credential_override: Option<&str>) ->
         "openrouter" => vec!["OPENROUTER_API_KEY"],
         "openai" => vec!["OPENAI_API_KEY"],
         "ollama" => vec!["OLLAMA_API_KEY"],
+        "chatjimmy" | "chatjimmy-cli" => vec![],
         "venice" => vec!["VENICE_API_KEY"],
         "groq" => vec!["GROQ_API_KEY"],
         "mistral" => vec!["MISTRAL_API_KEY"],
@@ -1227,6 +1229,10 @@ fn create_provider_with_url_and_options(
             api_url,
             key,
             options.reasoning_enabled,
+        ))),
+        "chatjimmy" | "chatjimmy-cli" => Ok(Box::new(chatjimmy::ChatJimmyProvider::new(
+            api_url,
+            key,
         ))),
         "gemini" | "google" | "google-gemini" => {
             let state_dir = options.zeroclaw_dir.clone().unwrap_or_else(|| {
@@ -1930,6 +1936,12 @@ pub fn list_providers() -> Vec<ProviderInfo> {
             local: true,
         },
         ProviderInfo {
+            name: "chatjimmy",
+            display_name: "ChatJimmy",
+            aliases: &["chatjimmy-cli"],
+            local: false,
+        },
+        ProviderInfo {
             name: "gemini",
             display_name: "Google Gemini",
             aliases: &["google", "google-gemini"],
@@ -2581,6 +2593,12 @@ mod tests {
         // Ollama may use API key when a remote endpoint is configured.
         assert!(create_provider("ollama", Some("dummy")).is_ok());
         assert!(create_provider("ollama", Some("any-value-here")).is_ok());
+    }
+
+    #[test]
+    fn factory_chatjimmy() {
+        assert!(create_provider("chatjimmy", None).is_ok());
+        assert!(create_provider("chatjimmy-cli", None).is_ok());
     }
 
     #[test]

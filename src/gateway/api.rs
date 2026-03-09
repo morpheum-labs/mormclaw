@@ -474,6 +474,14 @@ pub async fn handle_api_integrations_credentials_put(
             }
             config.default_provider = Some("ollama".to_string());
         }
+        "chatjimmy" => {
+            if let Some(default_model) = fields.get("default_model").and_then(|v| v.as_str()) {
+                if !default_model.is_empty() {
+                    config.default_model = Some(default_model.to_string());
+                }
+            }
+            config.default_provider = Some("chatjimmy".to_string());
+        }
         _ => {
             // Channel integrations - not implemented for credentials update via this endpoint
             return (
@@ -540,6 +548,7 @@ fn provider_key_from_integration_id(id: &str) -> Option<&'static str> {
         "volcengine-ark" => Some("ark"),
         "siliconflow" => Some("siliconflow"),
         "ollama" => Some("ollama"),
+        "chatjimmy" => Some("chatjimmy"),
         _ => None,
     }
 }
@@ -574,6 +583,7 @@ fn is_ai_provider(name: &str) -> bool {
             | "Volcengine ARK"
             | "SiliconFlow"
             | "Ollama"
+            | "ChatJimmy"
     )
 }
 
@@ -606,6 +616,7 @@ fn integration_id_from_provider(provider: &str) -> Option<String> {
         "doubao" | "volcengine" | "ark" => "Volcengine ARK",
         "siliconflow" | "silicon-cloud" => "SiliconFlow",
         "ollama" => "Ollama",
+        "chatjimmy" | "chatjimmy-cli" => "ChatJimmy",
         _ => return None,
     };
     Some(integration_name_to_id(name))
@@ -694,6 +705,21 @@ fn integration_settings_fields(
                 }),
             ];
             (has_key, fields)
+        }
+        "ChatJimmy" => {
+            let configured = config.default_provider.as_deref() == Some("chatjimmy");
+            let fields = vec![
+                serde_json::json!({
+                    "key": "default_model",
+                    "label": "Default Model",
+                    "required": false,
+                    "has_value": config.default_model.is_some(),
+                    "input_type": "select",
+                    "options": ["llama3.1-8B"],
+                    "current_value": config.default_model.as_deref().unwrap_or("llama3.1-8B"),
+                }),
+            ];
+            (configured, fields)
         }
         _ => {
             // Default: no configurable fields

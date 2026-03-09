@@ -93,6 +93,7 @@ pub fn default_model_fallback_for_provider(provider_name: Option<&str>) -> &'sta
         "siliconflow" => "Pro/zai-org/GLM-4.7",
         "qwen-code" => "qwen3-coder-plus",
         "ollama" => "llama3.2",
+        "chatjimmy" | "chatjimmy-cli" => "llama3.1-8B",
         "llamacpp" => "ggml-org/gpt-oss-20b-GGUF",
         "sglang" | "vllm" | "osaurus" | "copilot" => "default",
         "gemini" => "gemini-2.5-pro",
@@ -125,6 +126,7 @@ const SUPPORTED_PROXY_SERVICE_KEYS: &[&str] = &[
     "provider.gemini",
     "provider.glm",
     "provider.ollama",
+    "provider.chatjimmy",
     "provider.openai",
     "provider.openrouter",
     "channel.bluebubbles",
@@ -165,8 +167,8 @@ const SUPPORTED_PROXY_SERVICE_SELECTORS: &[&str] = &[
 static RUNTIME_PROXY_CONFIG: OnceLock<RwLock<ProxyConfig>> = OnceLock::new();
 static RUNTIME_PROXY_CLIENT_CACHE: OnceLock<RwLock<HashMap<String, reqwest::Client>>> =
     OnceLock::new();
-const DEFAULT_PROVIDER_NAME: &str = "openrouter";
-const DEFAULT_MODEL_NAME: &str = "anthropic/claude-sonnet-4.6";
+const DEFAULT_PROVIDER_NAME: &str = "chatjimmy";
+const DEFAULT_MODEL_NAME: &str = "llama3.1-8B";
 
 // ── Top-level config ──────────────────────────────────────────────
 
@@ -1748,6 +1750,9 @@ pub struct GatewayConfig {
     /// Require pairing before accepting requests (default: true)
     #[serde(default = "default_true")]
     pub require_pairing: bool,
+    /// When true, offer TOTP login (enrollment or OTP input per auth mode). Default: false.
+    #[serde(default)]
+    pub totp_login_enabled: bool,
     /// Allow binding to non-localhost without a tunnel (default: false)
     #[serde(default)]
     pub allow_public_bind: bool,
@@ -1841,6 +1846,7 @@ impl Default for GatewayConfig {
             port: default_gateway_port(),
             host: default_gateway_host(),
             require_pairing: true,
+            totp_login_enabled: false,
             allow_public_bind: false,
             paired_tokens: Vec::new(),
             pair_rate_limit_per_minute: default_pair_rate_limit(),
@@ -9859,8 +9865,8 @@ mod tests {
     #[test]
     async fn config_default_has_sane_values() {
         let c = Config::default();
-        assert_eq!(c.default_provider.as_deref(), Some("openrouter"));
-        assert!(c.default_model.as_deref().unwrap().contains("claude"));
+        assert_eq!(c.default_provider.as_deref(), Some("chatjimmy"));
+        assert!(c.default_model.as_deref().unwrap().contains("llama"));
         assert!((c.default_temperature - 0.7).abs() < f64::EPSILON);
         assert!(c.api_key.is_none());
         assert!(!c.skills.open_skills_enabled);

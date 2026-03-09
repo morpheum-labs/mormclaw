@@ -94,16 +94,71 @@ export async function pair(code: string): Promise<{ token: string }> {
   return data;
 }
 
+/** Regenerate pairing code (localhost only). Returns new code on success. */
+export async function regeneratePairingCode(): Promise<{ pairing_code: string }> {
+  const response = await fetch('/pairing/regenerate', { method: 'POST' });
+  const data = (await response.json()) as {
+    pairing_code?: string;
+    error?: string;
+    message?: string;
+  };
+  if (!response.ok) {
+    throw new Error(data.error ?? data.message ?? `Regenerate failed (${response.status})`);
+  }
+  const code = data.pairing_code;
+  if (!code) {
+    throw new Error('No pairing code in response');
+  }
+  return { pairing_code: code };
+}
+
 // ---------------------------------------------------------------------------
 // Public health (no auth required)
 // ---------------------------------------------------------------------------
 
-export async function getPublicHealth(): Promise<{ require_pairing: boolean; paired: boolean }> {
+export type AuthMode = 'pairing' | 'totp' | 'totp_enrollment';
+
+export async function getPublicHealth(): Promise<{
+  require_pairing: boolean;
+  paired: boolean;
+  auth_mode?: AuthMode;
+}> {
   const response = await fetch('/health');
   if (!response.ok) {
     throw new Error(`Health check failed (${response.status})`);
   }
-  return response.json() as Promise<{ require_pairing: boolean; paired: boolean }>;
+  return response.json() as Promise<{
+    require_pairing: boolean;
+    paired: boolean;
+    auth_mode?: AuthMode;
+  }>;
+}
+
+export async function getTotpEnrollment(): Promise<{
+  otpauth_uri: string;
+  qr_data_url?: string;
+}> {
+  const response = await fetch('/auth/totp/enroll');
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `Enrollment failed (${response.status})`);
+  }
+  return response.json() as Promise<{ otpauth_uri: string; qr_data_url?: string }>;
+}
+
+export async function loginWithTotp(code: string): Promise<{ token: string }> {
+  const response = await fetch('/auth/totp', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: code.trim() }),
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(data.error ?? `TOTP login failed (${response.status})`);
+  }
+  const data = (await response.json()) as { token: string };
+  setToken(data.token);
+  return data;
 }
 
 // ---------------------------------------------------------------------------
