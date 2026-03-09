@@ -4326,6 +4326,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "mormos-plugin-registry"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+]
+
+[[package]]
 name = "moxcms"
 version = "0.7.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9491,6 +9499,7 @@ dependencies = [
  "mail-parser",
  "matrix-sdk",
  "mime_guess",
+ "mormos-plugin-registry",
  "nanohtml2text",
  "nostr-sdk",
  "nusb",

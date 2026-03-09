@@ -25,7 +25,7 @@ const RECALL_OVER_FETCH_FACTOR: usize = 2;
 /// `Core` category memories receive a score boost so that durable facts,
 /// preferences, and project rules are more likely to appear in context
 /// even when semantic similarity to the current message is moderate.
-pub(super) async fn build_context(
+pub(crate) async fn build_context(
     mem: &dyn Memory,
     user_msg: &str,
     min_relevance_score: f64,
@@ -82,7 +82,7 @@ pub(super) async fn build_context(
 
 /// Build hardware datasheet context from RAG when peripherals are enabled.
 /// Includes pin-alias lookup (e.g. "red_led" → 13) when query matches, plus retrieved chunks.
-pub(super) fn build_hardware_context(
+pub(crate) fn build_hardware_context(
     rag: &crate::rag::HardwareRag,
     user_msg: &str,
     boards: &[String],

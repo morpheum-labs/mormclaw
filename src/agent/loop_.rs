@@ -1,6 +1,7 @@
 use crate::approval::{ApprovalManager, ApprovalRequest, ApprovalResponse};
 use crate::config::schema::{CostEnforcementMode, ModelPricing};
 use crate::config::{Config, ProgressMode};
+use crate::context_engine::{create_default_registry, DefaultContextEngine};
 use crate::cost::{BudgetCheck, CostTracker, UsagePeriod};
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::multimodal;
@@ -32,7 +33,7 @@ use std::time::{Duration, Instant};
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-mod context;
+pub(crate) mod context;
 pub(crate) mod detection;
 mod execution;
 pub(crate) mod history;
@@ -3468,6 +3469,27 @@ pub async fn process_message_with_session(
         .map(|b| b.board.clone())
         .collect();
 
+    // ── ContextEngine registry (OpenClaw-style slot-based lifecycle) ──
+    let registry = create_default_registry(
+        config.memory.min_relevance_score,
+        config.agent.compact_context,
+    );
+    let engine = registry.get_context_engine();
+    let mut session = mormos_plugin_registry::Session::new(
+        Uuid::new_v4().to_string(),
+        "cli",
+    );
+    session.session_id = session_id.map(|s| s.to_string());
+    let mut turn = mormos_plugin_registry::Turn::new(message);
+    if let Some(ref eng) = engine {
+        if let Err(e) = eng.bootstrap(&mut session).await {
+            tracing::warn!(%e, "ContextEngine bootstrap failed; continuing");
+        }
+        if let Err(e) = eng.ingest(&session, &mut turn).await {
+            tracing::warn!(%e, "ContextEngine ingest failed; continuing");
+        }
+    }
+
     let skills = crate::skills::load_skills_with_config(&config.workspace_dir, &config);
     let mut tool_descs: Vec<(&str, &str)> = vec![
         ("shell", "Execute terminal commands."),
@@ -3548,25 +3570,23 @@ pub async fn process_message_with_session(
     }
     system_prompt.push_str(&build_shell_policy_instructions(&config.autonomy));
 
-    let mem_context = build_context(
+    let rag_limit = if config.agent.compact_context { 2 } else { 5 };
+    let mut ctx = DefaultContextEngine::assemble_impl(
         mem.as_ref(),
-        message,
-        config.memory.min_relevance_score,
+        hardware_rag.as_ref(),
+        &board_names,
+        &turn.input,
         session_id,
+        config.memory.min_relevance_score,
+        rag_limit,
     )
     .await;
-    let rag_limit = if config.agent.compact_context { 2 } else { 5 };
-    let hw_context = hardware_rag
-        .as_ref()
-        .map(|r| build_hardware_context(r, message, &board_names, rag_limit))
-        .unwrap_or_default();
-    let context = format!("{mem_context}{hw_context}");
-    let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S %Z");
-    let enriched = if context.is_empty() {
-        format!("[{now}] {message}")
-    } else {
-        format!("{context}[{now}] {message}")
-    };
+    if let Some(ref eng) = engine {
+        if let Err(e) = eng.assemble(&session, &mut ctx).await {
+            tracing::warn!(%e, "ContextEngine assemble failed; using built context");
+        }
+    }
+    let enriched = ctx.enriched_prompt;
 
     let mut history = vec![
         ChatMessage::system(&system_prompt),
@@ -3602,6 +3622,14 @@ pub async fn process_message_with_session(
         ),
     )
     .await?;
+
+    // ── ContextEngine after_turn hook ──
+    if let Some(ref eng) = engine {
+        turn.output = Some(response.clone());
+        if let Err(e) = eng.after_turn(&session, &turn).await {
+            tracing::warn!(%e, "ContextEngine after_turn failed");
+        }
+    }
 
     // ── Post-turn fact extraction (channel / single-message-with-session) ──
     if config.memory.auto_save {

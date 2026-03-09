@@ -4,6 +4,7 @@ members = [
     "crates/robot-kit",
     "crates/zeroclaw-types",
     "crates/zeroclaw-core",
+    "crates/mormos-plugin-registry",
 ]
 resolver = "2"
 
@@ -106,6 +107,9 @@ parking_lot = "0.12"
 
 # Async traits
 async-trait = "0.1"
+
+# Slot-based plugin registry (mormOS ContextEngine)
+mormos-plugin-registry = { path = "crates/mormos-plugin-registry" }
 
 # HMAC-SHA256 (Zhipu/GLM JWT auth)
 ring = "0.17"

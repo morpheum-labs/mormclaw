@@ -3315,6 +3315,28 @@ pub struct PluginsConfig {
     /// Per-plugin configuration entries.
     #[serde(default)]
     pub entries: std::collections::HashMap<String, PluginEntryConfig>,
+
+    /// Slot bindings — which plugin implements each slot (OpenClaw parity).
+    /// Example: `slots = { contextEngine = "mormos-legacy" }`
+    #[serde(default)]
+    pub slots: PluginSlotsConfig,
+}
+
+/// Slot-to-plugin bindings. Mirrors OpenClaw's `plugins.slots.contextEngine`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct PluginSlotsConfig {
+    /// Context engine plugin ID (e.g. "mormos-legacy", "mormos-onchain").
+    /// When unset, the default legacy engine is used.
+    #[serde(default, rename = "contextEngine")]
+    pub context_engine: Option<String>,
+}
+
+impl Default for PluginSlotsConfig {
+    fn default() -> Self {
+        Self {
+            context_engine: None,
+        }
+    }
 }
 
 fn default_plugins_enabled() -> bool {
@@ -3329,6 +3351,7 @@ impl Default for PluginsConfig {
             deny: Vec::new(),
             load_paths: Vec::new(),
             entries: std::collections::HashMap::new(),
+            slots: PluginSlotsConfig::default(),
         }
     }
 }

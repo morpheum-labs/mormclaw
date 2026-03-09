@@ -1,0 +1,13 @@
+[package]
+name = "mormos-plugin-registry"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Slot-based plugin registry and ContextEngine lifecycle for mormOS agent orchestration."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+async-trait = "0.1"
+anyhow = "1.0"
