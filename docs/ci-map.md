@@ -2,7 +2,7 @@
 
 This document explains what each GitHub workflow does, when it runs, and whether it should block merges.
 
-For event-by-event delivery behavior across PR, merge, push, and release, see [`.github/workflows/main-branch-flow.md`](../.github/workflows/main-branch-flow.md).
+For event-by-event delivery behavior across PR, merge, push, and release, see [`.github/workflows/master-branch-flow.md`](../.github/workflows/master-branch-flow.md).
 
 ## Merge-Blocking vs Optional
 
@@ -25,7 +25,6 @@ Merge-blocking checks should stay small and deterministic. Optional checks are u
     - Recommended for workflow-changing PRs
 - `.github/workflows/pr-intake-checks.yml` (`PR Intake Checks`)
     - Purpose: safe pre-CI PR checks (template completeness, added-line tabs/trailing-whitespace/conflict markers) with immediate sticky feedback comment
-
 ### Non-Blocking but Important
 
 - `.github/workflows/pub-docker-img.yml` (`Docker`)

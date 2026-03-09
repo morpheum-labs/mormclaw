@@ -1,4 +1,4 @@
-# Main Branch Delivery Flows
+# Master Branch Delivery Flows
 
 This document explains what runs when code is proposed to `dev`/`main`, merged to `main`, and released.
 
@@ -7,6 +7,12 @@ Use this with:
 - [`docs/ci-map.md`](../../docs/ci-map.md)
 - [`docs/pr-workflow.md`](../../docs/pr-workflow.md)
 - [`docs/release-process.md`](../../docs/release-process.md)
+
+## Branching Model
+
+ZeroClaw uses a single default branch: `master`. All contributor PRs target `master` directly. There is no `dev` or promotion branch.
+
+Current maintainers with PR approval authority: `theonlyhennygod` and `jordanthejet`.
 
 ## Event Summary
 
@@ -27,8 +33,8 @@ Observed averages below are from recent completed runs (sampled from GitHub Acti
 | `pr-intake-checks.yml` | PR open/update (`pull_request_target`) | 14.5s | No | No | No |
 | `pr-labeler.yml` | PR open/update (`pull_request_target`) | 53.7s | No | No | No |
 | `pr-auto-response.yml` | PR/issue automation | 24.3s | No | No | No |
-| `ci-run.yml` | PR + push to `dev`/`main` | 74.7s | No | No | No |
-| `sec-audit.yml` | PR + push to `dev`/`main` | 127.2s | No | No | No |
+| `ci-run.yml` | PR + push to `master` | 74.7s | No | No | No |
+| `sec-audit.yml` | PR + push to `master` | 127.2s | No | No | No |
 | `workflow-sanity.yml` | Workflow-file changes | 34.2s | No | No | No |
 | `pr-label-policy-check.yml` | Label policy/automation changes | 14.7s | No | No | No |
 | `pub-docker-img.yml` (`pull_request`) | Docker build-input PR changes | 240.4s | Yes | Yes | No |
@@ -44,9 +50,9 @@ Notes:
 
 ## Step-By-Step
 
-### 1) PR from branch in this repository -> `dev`
+### 1) PR from branch in this repository -> `master`
 
-1. Contributor opens or updates PR against `dev`.
+1. Contributor opens or updates PR against `master`.
 2. `pull_request_target` automation runs (typical runtime):
    - `pr-intake-checks.yml` posts intake warnings/errors.
    - `pr-labeler.yml` sets size/risk/scope labels.
@@ -82,9 +88,9 @@ Notes:
 10. Maintainer merges PR once checks and review policy are satisfied.
 11. Merge emits a `push` event on `dev` (see scenario 4).
 
-### 2) PR from fork -> `dev`
+### 2) PR from fork -> `master`
 
-1. External contributor opens PR from `fork/<branch>` into `zeroclaw:dev`.
+1. External contributor opens PR from `fork/<branch>` into `zeroclaw:master`.
 2. Immediately on `opened`:
    - `pull_request_target` workflows start with base-repo context and base-repo token:
      - `pr-intake-checks.yml`
@@ -115,7 +121,7 @@ Notes:
    - `license-file-owner-guard` failing when root license files are modified by non-owner PR author.
    - `CI Required Gate` failure caused by upstream jobs.
    - repeated `pull_request_target` reruns from label churn causing noisy signals.
-9. After merge, normal `push` workflows on `dev` execute (scenario 4).
+9. After merge, normal `push` workflows on `master` execute (scenario 3).
 
 ### 3) PR to `main` (direct or from `dev`)
 
@@ -144,7 +150,7 @@ Workflow: `.github/workflows/pub-docker-img.yml`
 
 ### PR behavior
 
-1. Triggered on `pull_request` to `dev` or `main` when Docker build-input paths change.
+1. Triggered on `pull_request` to `master` when Docker build-input paths change.
 2. Runs `PR Docker Smoke` job:
    - Builds local smoke image with Buildx builder.
    - Verifies container with `docker run ... --version`.
@@ -164,7 +170,7 @@ Workflow: `.github/workflows/pub-docker-img.yml`
 9. Typical runtime in recent sample: ~139.9s.
 10. Result: pushed image tags under `ghcr.io/<owner>/<repo>` with publish-contract + vulnerability-gate + scan artifacts.
 
-Important: Docker publish now requires a `v*` tag push; regular `dev`/`main` branch pushes do not publish images.
+Important: Docker publish requires a `v*` tag push; regular `master` branch pushes do not publish images.
 
 ## Release Logic
 
@@ -214,11 +220,11 @@ Canary policy lane:
 
 ## Mermaid Diagrams
 
-### PR to Dev
+### PR to Master
 
 ```mermaid
 flowchart TD
-  A["PR opened or updated -> dev"] --> B["pull_request_target lane"]
+  A["PR opened or updated -> master"] --> B["pull_request_target lane"]
   B --> B1["pr-intake-checks.yml"]
   B --> B2["pr-labeler.yml"]
   B --> B3["pr-auto-response.yml"]
@@ -232,7 +238,7 @@ flowchart TD
   D --> E{"Checks + review policy pass?"}
   E -->|No| F["PR stays open"]
   E -->|Yes| G["Merge PR"]
-  G --> H["push event on dev"]
+  G --> H["push event on master"]
 ```
 
 ### Main Delivery and Release

@@ -1,38 +1,46 @@
-# Actions Source Policy (Phase 1)
+# Actions Source Policy
 
 This document defines the current GitHub Actions source-control policy for this repository.
-
-Phase 1 objective: lock down action sources with minimal disruption, before full SHA pinning.
 
 ## Current Policy
 
 - Repository Actions permissions: enabled
 - Allowed actions mode: selected
-- SHA pinning required: false (deferred to Phase 2)
 
-Selected allowlist patterns:
+Selected allowlist (all actions currently used across CI, Beta Release, and Promote Release workflows):
 
-- `actions/*` (covers `actions/cache`, `actions/checkout`, `actions/upload-artifact`, `actions/download-artifact`, and other first-party actions)
-- `docker/*`
+| Action | Used In | Purpose |
+|--------|---------|---------|
+| `actions/checkout@v4` | All workflows | Repository checkout |
+| `actions/upload-artifact@v4` | release, promote-release | Upload build artifacts |
+| `actions/download-artifact@v4` | release, promote-release | Download build artifacts for packaging |
+| `dtolnay/rust-toolchain@stable` | All workflows | Install Rust toolchain (1.92.0) |
+| `Swatinem/rust-cache@v2` | All workflows | Cargo build/dependency caching |
+| `softprops/action-gh-release@v2` | release, promote-release | Create GitHub Releases |
+| `docker/setup-buildx-action@v3` | release, promote-release | Docker Buildx setup |
+| `docker/login-action@v3` | release, promote-release | GHCR authentication |
+| `docker/build-push-action@v6` | release, promote-release | Multi-platform Docker image build and push |
+
+Equivalent allowlist patterns:
+
+- `actions/*`
 - `dtolnay/rust-toolchain@*`
-- `DavidAnson/markdownlint-cli2-action@*`
-- `lycheeverse/lychee-action@*`
-- `EmbarkStudios/cargo-deny-action@*`
-- `rustsec/audit-check@*`
-- `rhysd/actionlint@*`
+- `Swatinem/rust-cache@*`
 - `softprops/action-gh-release@*`
 - `sigstore/cosign-installer@*`
 - `Checkmarx/vorpal-reviewdog-github-action@*`
 - `Swatinem/rust-cache@*`
+- `docker/*`
 
-## Change Control Export
+## Workflows
 
-Use these commands to export the current effective policy for audit/change control:
+| Workflow | File | Trigger |
+|----------|------|---------|
+| CI | `.github/workflows/ci.yml` | Pull requests to `master` |
+| Beta Release | `.github/workflows/release.yml` | Push to `master` |
+| Promote Release | `.github/workflows/promote-release.yml` | Manual `workflow_dispatch` |
 
-```bash
-gh api repos/zeroclaw-labs/zeroclaw/actions/permissions
-gh api repos/zeroclaw-labs/zeroclaw/actions/permissions/selected-actions
-```
+## Change Control
 
 Record each policy change with:
 
@@ -42,22 +50,20 @@ Record each policy change with:
 - allowlist delta (added/removed patterns)
 - rollback note
 
-## Why This Phase
+Use these commands to export the current effective policy:
 
-- Reduces supply-chain risk from unreviewed marketplace actions.
-- Preserves current CI/CD functionality with low migration overhead.
-- Prepares for Phase 2 full SHA pinning without blocking active development.
+```bash
+gh api repos/zeroclaw-labs/zeroclaw/actions/permissions
+gh api repos/zeroclaw-labs/zeroclaw/actions/permissions/selected-actions
+```
 
-## Agentic Workflow Guardrails
-
-Because this repository has high agent-authored change volume:
+## Guardrails
 
 - Any PR that adds or changes `uses:` action sources must include an allowlist impact note.
 - New third-party actions require explicit maintainer review before allowlisting.
 - Expand allowlist only for verified missing actions; avoid broad wildcard exceptions.
-- Keep rollback instructions in the PR description for Actions policy changes.
 
-## Validation Checklist
+## Change Log
 
 After allowlist changes, validate:
 

@@ -93,7 +93,7 @@ Automation assists with triage and guardrails, but final merge accountability re
 
 ## 3. Required Repository Settings
 
-Maintain these branch protection rules on `dev` and `main`:
+Maintain these branch protection rules on `master`:
 
 - Require status checks before merge.
 - Require checks `CI Required Gate` and `Security Required Gate`.
@@ -130,7 +130,7 @@ Maintain these branch protection rules on `dev` and `main`:
 - `CI Required Gate` and `Security Required Gate` are the merge gates.
 - Docs-only PRs use fast-path and skip heavy Rust jobs.
 - Non-doc PRs must pass lint, tests, and release build smoke check.
-- Rust-impacting PRs use the same required gate set as `dev`/`main` pushes (no PR build-only shortcut).
+- Rust-impacting PRs use the same required gate set as `master` pushes (no PR build-only shortcut).
 
 ### 4.3 Step C: Review
 
@@ -221,7 +221,7 @@ We do **not** require contributors to quantify AI-vs-human line ownership.
 - First maintainer triage target: within 48 hours.
 - If PR is blocked, maintainer leaves one actionable checklist.
 - `stale` automation is used to keep queue healthy; maintainers can apply `no-stale` when needed.
-- `pr-hygiene` automation checks open PRs every 12 hours and posts a nudge when a PR has no new commits for 48+ hours and is either behind `main` or missing/failing `CI Required Gate` on the head commit.
+- `pr-hygiene` automation checks open PRs every 12 hours and posts a nudge when a PR has no new commits for 48+ hours and is either behind `master` or missing/failing `CI Required Gate` on the head commit.
 
 ### 8.1 Queue budget controls
 
@@ -278,7 +278,7 @@ For agent-assisted contributions, reviewers should also verify the author demons
 
 If a merged PR causes regressions:
 
-1. Revert PR immediately on `main`.
+1. Revert PR immediately on `master`.
 2. Open a follow-up issue with root-cause analysis.
 3. Re-introduce fix only with regression tests.
 

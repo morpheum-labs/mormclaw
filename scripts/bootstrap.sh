@@ -1561,8 +1561,8 @@ if [[ ! -f "$WORK_DIR/Cargo.toml" ]]; then
     fi
 
     TEMP_DIR="$(mktemp -d -t zeroclaw-bootstrap-XXXXXX)"
-    info "No local repository detected; cloning latest main branch"
-    git clone --depth 1 "$REPO_URL" "$TEMP_DIR"
+    info "No local repository detected; cloning latest master branch"
+    git clone --depth 1 --branch master "$REPO_URL" "$TEMP_DIR"
     WORK_DIR="$TEMP_DIR"
     TEMP_CLONE=true
   fi

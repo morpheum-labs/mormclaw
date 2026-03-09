@@ -254,7 +254,7 @@ When uncertain, classify as higher risk.
 
 All contributors (human or agent) must follow the same collaboration flow:
 
-- Create and work from a non-`main` branch.
+- Create and work from a non-`master` branch.
 - Commit changes to that branch with clear, scoped commit messages.
 - Open a PR to `main` by default (`dev` is optional for integration batching); do not push directly to `dev` or `main`.
 - `main` accepts direct PR merges after required checks and review policy pass.
