@@ -31,3 +31,6 @@ rustflags = ["-C", "link-args=/STACK:8388608"]
 
 [target.aarch64-pc-windows-msvc]
 rustflags = ["-C", "link-args=/STACK:8388608"]
+
+[build]
+target-dir = "/Volumes/Mac-Mugen/rustcompile"

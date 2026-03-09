@@ -26,7 +26,7 @@ if [[ -z "${DOCKER_SPACE_SORA}" || -z "${DOCKER_TOKEN_SORA}" ]]; then
 fi
 
 echo "Building ${IMAGE_NAME}:${TAG}..."
-docker build -f Dockerfile --target release -t "${IMAGE_NAME}:${TAG}" .
+docker build -f mormsodockerfile --target release -t "${IMAGE_NAME}:${TAG}" .
 
 REMOTE_IMAGE="${DOCKER_SPACE_SORA}/${IMAGE_NAME}:${TAG}"
 echo "Logging in and pushing ${REMOTE_IMAGE}..."
