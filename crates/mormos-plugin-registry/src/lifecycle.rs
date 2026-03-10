@@ -5,11 +5,12 @@
 //! plus prepare_subagent_spawn and on_subagent_ended for sub-agent flows.
 
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 
 use anyhow::Result;
 
 /// Session-scoped state. Passed to bootstrap and available across a conversation.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Session {
     pub id: String,
     pub channel: String,
@@ -32,7 +33,7 @@ impl Session {
 }
 
 /// Single turn: raw input and (after execution) output.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Turn {
     pub input: String,
     pub output: Option<String>,
@@ -53,7 +54,7 @@ impl Turn {
 }
 
 /// Assembled context: memory preamble, hardware RAG, enriched prompt.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Context {
     pub mem_context: String,
     pub hw_context: String,
@@ -82,14 +83,14 @@ impl Context {
 }
 
 /// Request to spawn a sub-agent.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpawnRequest {
     pub agent_id: String,
     pub command: String,
 }
 
 /// Result of a completed sub-agent run.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubagentResult {
     pub session_id: String,
     pub success: bool,
@@ -132,5 +133,27 @@ pub trait ContextEngine: Send + Sync {
     /// When a sub-agent finishes. Merge result, update registry.
     async fn on_subagent_ended(&self, _result: &SubagentResult) -> Result<()> {
         Ok(())
+    }
+}
+
+/// Sub-agent spawner trait — policy gate for sub-agent spawning (Phase 3).
+/// Allows plugins to approve or reject spawn requests before execution.
+#[async_trait]
+pub trait SubagentSpawner: Send + Sync {
+    /// Check whether a spawn request is allowed. Return `true` to allow, `false` to deny.
+    async fn can_spawn(&self, request: &SpawnRequest) -> Result<bool> {
+        let _ = request;
+        Ok(true)
+    }
+}
+
+/// Execution policy trait — policy gate for tool execution (Phase 4).
+/// Allows plugins to approve or reject tool calls before execution.
+#[async_trait]
+pub trait ExecutionPolicy: Send + Sync {
+    /// Check whether a tool call is allowed. Return `true` to allow, `false` to deny.
+    async fn can_execute_tool(&self, tool_name: &str, args: &serde_json::Value) -> Result<bool> {
+        let _ = (tool_name, args);
+        Ok(true)
     }
 }

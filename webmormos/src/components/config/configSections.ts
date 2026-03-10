@@ -372,6 +372,27 @@ export const CONFIG_SECTIONS: SectionDef[] = [
         { value: 'sequential', label: 'Sequential' },
         { value: 'parallel', label: 'Parallel' },
       ]},
+      { key: 'allowed_tools', label: 'Allowed Tools', labelKey: 'config.field_allowed_tools', type: 'tag-list', tagPlaceholder: 'e.g. shell, file_read, memory_recall', description: 'When non-empty (with mormos-allowlist execution policy), only these tools can execute' },
+      { key: 'denied_tools', label: 'Denied Tools', labelKey: 'config.field_denied_tools', type: 'tag-list', tagPlaceholder: 'e.g. shell, file_write, memory_forget', description: 'Tool denylist applied after allowed_tools' },
+    ],
+  },
+
+  // ── Agent: Subagents ─────────────────────────────────────────────
+  {
+    path: 'agent.subagents',
+    category: 'general',
+    title: 'Agent: Subagents',
+    titleKey: 'config.section_agent_subagents',
+    description: 'Background sub-agent orchestration and policy',
+    icon: Users,
+    defaultCollapsed: true,
+    fields: [
+      { key: 'enabled', label: 'Enabled', type: 'toggle', defaultValue: true, description: 'Enable background sub-agent tools' },
+      { key: 'auto_activate', label: 'Auto Activate', type: 'toggle', defaultValue: true, description: 'Allow automatic sub-agent selection when not specified' },
+      { key: 'max_concurrent', label: 'Max Concurrent', type: 'number', min: 1, defaultValue: 10, description: 'Max concurrently running sub-agents' },
+      { key: 'load_window_secs', label: 'Load Window (s)', type: 'number', min: 1, defaultValue: 180, description: 'Sliding window for load/failure signals' },
+      { key: 'allowed_agents', label: 'Allowed Agents', labelKey: 'config.field_allowed_agents', type: 'tag-list', tagPlaceholder: 'e.g. delegate-lead, task-planner', description: 'When mormos-allowlist spawner: only these agents can spawn' },
+      { key: 'denied_agents', label: 'Denied Agents', labelKey: 'config.field_denied_agents', type: 'tag-list', tagPlaceholder: 'e.g. untrusted-agent', description: 'Agent denylist applied after allowed_agents' },
     ],
   },
 
@@ -1061,6 +1082,22 @@ export const CONFIG_SECTIONS: SectionDef[] = [
       { key: 'allow', label: 'Allow List', type: 'tag-list', tagPlaceholder: 'e.g. my-plugin, tools-extra' },
       { key: 'deny', label: 'Deny List', type: 'tag-list', tagPlaceholder: 'e.g. untrusted-plugin' },
       { key: 'load_paths', label: 'Load Paths', type: 'tag-list', tagPlaceholder: 'e.g. ./plugins, /opt/zeroclaw/plugins' },
+    ],
+  },
+
+  // ── Plugins: Slots ───────────────────────────────────────────────
+  {
+    path: 'plugins.slots',
+    category: 'advanced',
+    title: 'Plugins: Slots',
+    titleKey: 'config.section_plugins_slots',
+    description: 'Slot bindings for context engine, subagent spawner, execution policy',
+    icon: Puzzle,
+    defaultCollapsed: true,
+    fields: [
+      { key: 'contextEngine', label: 'Context Engine', labelKey: 'config.field_context_engine', type: 'text', description: 'mormos-legacy (default) or wasm:path/to/plugin.wasm' },
+      { key: 'subagentSpawner', label: 'Subagent Spawner', labelKey: 'config.field_subagent_spawner', type: 'text', description: 'mormos-default, mormos-allowlist, or wasm:path/to/plugin.wasm' },
+      { key: 'executionPolicy', label: 'Execution Policy', labelKey: 'config.field_execution_policy', type: 'text', description: 'mormos-default, mormos-allowlist, or wasm:path/to/plugin.wasm' },
     ],
   },
 

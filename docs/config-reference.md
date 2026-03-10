@@ -217,6 +217,8 @@ Controls asynchronous/background delegation (`subagent_spawn`, `subagent_list`, 
 | `recent_failure_penalty` | `16` | Score penalty per recent failure within the load window |
 | `queue_wait_ms` | `15000` | Wait duration for free concurrency slot before failing (`0` = fail-fast) |
 | `queue_poll_ms` | `200` | Poll interval while waiting for a slot |
+| `allowed_agents` | `[]` | When non-empty and `subagentSpawner = "mormos-allowlist"`, only these agent IDs can be spawned |
+| `denied_agents` | `[]` | When non-empty and `subagentSpawner = "mormos-allowlist"`, these agent IDs are always denied |
 
 Notes:
 
@@ -261,6 +263,38 @@ Example tool payload:
   "subagents_queue_wait_ms": 15000,
   "subagents_queue_poll_ms": 200
 }
+```
+
+## `[plugins]` and `[plugins.slots]`
+
+Slot-based plugin registry for ContextEngine, SubagentSpawner, ExecutionPolicy, and future slots.
+
+| Key | Default | Purpose |
+|---|---|---|
+| `enabled` | `true` | Enable/disable plugin system |
+| `slots.contextEngine` | unset | Context engine: `mormos-legacy` or `wasm:path/to/plugin.wasm` |
+| `slots.subagentSpawner` | unset | Sub-agent spawn policy gate: `mormos-default`, `mormos-allowlist`, or `wasm:path/to/plugin.wasm` |
+| `slots.executionPolicy` | unset | Tool execution policy gate: `mormos-default`, `mormos-allowlist`, or `wasm:path/to/plugin.wasm` |
+
+Notes:
+
+- When `contextEngine` is unset, the default legacy engine is used.
+- When `subagentSpawner` is unset, the default spawner (allows all) is used.
+- When `executionPolicy` is unset, the default policy (allows all tool calls) is used.
+- When `executionPolicy = "mormos-allowlist"`, uses `agent.allowed_tools` and `agent.denied_tools` to gate each tool call at runtime.
+- `wasm:...` paths are relative to the config file directory unless absolute.
+- WASM plugins require `--features wasm-tools` on Linux/macOS/Windows.
+
+Example:
+
+```toml
+[plugins]
+enabled = true
+
+[plugins.slots]
+contextEngine = "mormos-legacy"
+subagentSpawner = "mormos-default"
+executionPolicy = "mormos-default"
 ```
 
 ## `[security.otp]`

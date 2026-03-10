@@ -712,12 +712,26 @@ pub fn all_tools_with_runtime(
         }
 
         let subagent_registry = Arc::new(SubAgentRegistry::new());
+        let subagents_policy = crate::context_engine::SubagentsPolicyConfig {
+            allowed_agents: root_config.agent.subagents.allowed_agents.clone(),
+            denied_agents: root_config.agent.subagents.denied_agents.clone(),
+        };
+        let execution_policy_config = crate::context_engine::ExecutionPolicyConfig {
+            allowed_tools: root_config.agent.allowed_tools.clone(),
+            denied_tools: root_config.agent.denied_tools.clone(),
+        };
         let plugin_registry = crate::context_engine::create_registry_from_config(
             root_config.memory.min_relevance_score,
             root_config.agent.compact_context,
             root_config.plugins.slots.context_engine.as_deref(),
+            root_config.config_path.parent(),
+            root_config.plugins.slots.subagent_spawner.as_deref(),
+            Some(&subagents_policy),
+            root_config.plugins.slots.execution_policy.as_deref(),
+            Some(&execution_policy_config),
         );
         let context_engine = plugin_registry.get_context_engine();
+        let subagent_spawner = plugin_registry.get_subagent_spawner();
         tool_arcs.push(Arc::new(
             SubAgentSpawnTool::new(
                 all_agents,
@@ -733,6 +747,7 @@ pub fn all_tools_with_runtime(
                 runtime_config_path,
             )
             .with_context_engine(context_engine)
+            .with_subagent_spawner(subagent_spawner)
             .with_load_tracker(load_tracker),
         ));
         tool_arcs.push(Arc::new(SubAgentListTool::new(subagent_registry.clone())));

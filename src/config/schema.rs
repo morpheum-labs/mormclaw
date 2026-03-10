@@ -1023,6 +1023,12 @@ pub struct SubAgentsConfig {
     /// Poll interval while waiting for a concurrency slot.
     #[serde(default = "default_subagents_queue_poll_ms")]
     pub queue_poll_ms: usize,
+    /// Optional allowlist: when non-empty, only these agent IDs can be spawned.
+    #[serde(default)]
+    pub allowed_agents: Vec<String>,
+    /// Optional denylist: these agent IDs are always denied.
+    #[serde(default)]
+    pub denied_agents: Vec<String>,
 }
 
 impl Default for SubAgentsConfig {
@@ -1038,6 +1044,8 @@ impl Default for SubAgentsConfig {
             recent_failure_penalty: default_subagents_recent_failure_penalty(),
             queue_wait_ms: default_subagents_queue_wait_ms(),
             queue_poll_ms: default_subagents_queue_poll_ms(),
+            allowed_agents: Vec::new(),
+            denied_agents: Vec::new(),
         }
     }
 }
@@ -3322,19 +3330,27 @@ pub struct PluginsConfig {
     pub slots: PluginSlotsConfig,
 }
 
-/// Slot-to-plugin bindings. Mirrors OpenClaw's `plugins.slots.contextEngine`.
+/// Slot-to-plugin bindings. Mirrors OpenClaw's `plugins.slots`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct PluginSlotsConfig {
-    /// Context engine plugin ID (e.g. "mormos-legacy", "mormos-onchain").
+    /// Context engine plugin ID: "mormos-legacy" or "wasm:path/to/plugin.wasm".
     /// When unset, the default legacy engine is used.
     #[serde(default, rename = "contextEngine")]
     pub context_engine: Option<String>,
+    /// Sub-agent spawner plugin ID (e.g. "mormos-default"). Policy gate for spawn requests.
+    #[serde(default, rename = "subagentSpawner")]
+    pub subagent_spawner: Option<String>,
+    /// Execution policy plugin ID (e.g. "mormos-default"). Policy gate for tool execution.
+    #[serde(default, rename = "executionPolicy")]
+    pub execution_policy: Option<String>,
 }
 
 impl Default for PluginSlotsConfig {
     fn default() -> Self {
         Self {
             context_engine: None,
+            subagent_spawner: None,
+            execution_policy: None,
         }
     }
 }

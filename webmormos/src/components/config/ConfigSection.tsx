@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronRight, ChevronDown } from 'lucide-react';
+import { t } from '@/lib/i18n';
 import type { SectionDef, FieldDef } from './types';
 import TextField from './fields/TextField';
 import NumberField from './fields/NumberField';
@@ -74,7 +75,9 @@ export default function ConfigSection({
           <ChevronDown className="h-4 w-4 text-gray-500 flex-shrink-0" />
         )}
         <Icon className="h-4 w-4 text-blue-400 flex-shrink-0" />
-        <span className="text-sm font-medium text-white">{section.title}</span>
+        <span className="text-sm font-medium text-white">
+          {section.titleKey ? t(section.titleKey) : section.title}
+        </span>
         {section.description && (
           <span className="text-xs text-gray-500 hidden sm:inline">
             — {section.description}
@@ -98,7 +101,7 @@ export default function ConfigSection({
             return (
               <div key={field.key} className={`flex flex-col${spanFull ? ' sm:col-span-2' : ''}`}>
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-300 mb-1.5">
-                  <span>{field.label}</span>
+                  <span>{field.labelKey ? t(field.labelKey) : field.label}</span>
                   {field.sensitive && (
                     <span className="text-[10px] text-yellow-400 bg-yellow-900/30 border border-yellow-800/50 px-1.5 py-0.5 rounded">
                       sensitive

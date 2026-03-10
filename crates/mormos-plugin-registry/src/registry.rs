@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::lifecycle::ContextEngine;
+use crate::lifecycle::{ContextEngine, ExecutionPolicy, SubagentSpawner};
 
 /// Pluggable extension points. Each slot holds at most one active plugin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -55,6 +55,10 @@ pub trait Plugin: Send + Sync {
 pub struct PluginRegistry {
     context_engine: Option<Arc<dyn ContextEngine>>,
     active_context_engine_id: Option<String>,
+    subagent_spawner: Option<Arc<dyn SubagentSpawner>>,
+    active_subagent_spawner_id: Option<String>,
+    execution_policy: Option<Arc<dyn ExecutionPolicy>>,
+    active_execution_policy_id: Option<String>,
     /// Future: MemoryManager, ToolExecutor, ApprovalGuard, etc.
     _slots: HashMap<Slot, String>,
 }
@@ -64,12 +68,20 @@ impl PluginRegistry {
         Self {
             context_engine: None,
             active_context_engine_id: None,
+            subagent_spawner: None,
+            active_subagent_spawner_id: None,
+            execution_policy: None,
+            active_execution_policy_id: None,
             _slots: HashMap::new(),
         }
     }
 
     /// Register the ContextEngine for the given slot. Replaces any existing.
-    pub fn register_context_engine(&mut self, id: impl Into<String>, engine: Arc<dyn ContextEngine>) {
+    pub fn register_context_engine(
+        &mut self,
+        id: impl Into<String>,
+        engine: Arc<dyn ContextEngine>,
+    ) {
         let id = id.into();
         self.active_context_engine_id = Some(id.clone());
         self.context_engine = Some(engine);
@@ -86,10 +98,46 @@ impl PluginRegistry {
         self.active_context_engine_id.as_deref()
     }
 
+    /// Register the SubagentSpawner for the given slot. Replaces any existing.
+    pub fn register_subagent_spawner(
+        &mut self,
+        id: impl Into<String>,
+        spawner: Arc<dyn SubagentSpawner>,
+    ) {
+        let id = id.into();
+        self.active_subagent_spawner_id = Some(id.clone());
+        self.subagent_spawner = Some(spawner);
+        self._slots.insert(Slot::SubagentSpawner, id);
+    }
+
+    /// Get the active SubagentSpawner, if any.
+    pub fn get_subagent_spawner(&self) -> Option<Arc<dyn SubagentSpawner>> {
+        self.subagent_spawner.clone()
+    }
+
+    /// Register the ExecutionPolicy for the given slot. Replaces any existing.
+    pub fn register_execution_policy(
+        &mut self,
+        id: impl Into<String>,
+        policy: Arc<dyn ExecutionPolicy>,
+    ) {
+        let id = id.into();
+        self.active_execution_policy_id = Some(id.clone());
+        self.execution_policy = Some(policy);
+        self._slots.insert(Slot::ExecutionPolicy, id);
+    }
+
+    /// Get the active ExecutionPolicy, if any.
+    pub fn get_execution_policy(&self) -> Option<Arc<dyn ExecutionPolicy>> {
+        self.execution_policy.clone()
+    }
+
     /// Check if a slot has an active plugin.
     pub fn has_slot(&self, slot: Slot) -> bool {
         match slot {
             Slot::ContextEngine => self.context_engine.is_some(),
+            Slot::SubagentSpawner => self.subagent_spawner.is_some(),
+            Slot::ExecutionPolicy => self.execution_policy.is_some(),
             _ => self._slots.contains_key(&slot),
         }
     }

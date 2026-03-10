@@ -1,0 +1,25 @@
+package zeroclaw:subagent-spawner@1.0.0;
+
+/// Request to spawn a sub-agent.
+record spawn-request {
+  agent-id: string,
+  command: string,
+}
+
+/// Result of can_spawn.
+record can-spawn-result {
+  allowed: bool,
+  error: option<string>,
+}
+
+/// Subagent spawner interface — policy gate for sub-agent spawning.
+/// Host invokes via WASI stdio: JSON over stdin/stdout.
+/// See docs/design/context-engine-plugin-registry.md for protocol details.
+interface subagent-spawner {
+  /// Check whether a spawn request is allowed. Return allowed=true to permit, false to deny.
+  can-spawn: func(request: spawn-request) -> can-spawn-result;
+}
+
+world subagent-spawner-plugin {
+  export subagent-spawner;
+}

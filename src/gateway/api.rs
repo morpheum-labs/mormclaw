@@ -708,17 +708,15 @@ fn integration_settings_fields(
         }
         "ChatJimmy" => {
             let configured = config.default_provider.as_deref() == Some("chatjimmy");
-            let fields = vec![
-                serde_json::json!({
-                    "key": "default_model",
-                    "label": "Default Model",
-                    "required": false,
-                    "has_value": config.default_model.is_some(),
-                    "input_type": "select",
-                    "options": ["llama3.1-8B"],
-                    "current_value": config.default_model.as_deref().unwrap_or("llama3.1-8B"),
-                }),
-            ];
+            let fields = vec![serde_json::json!({
+                "key": "default_model",
+                "label": "Default Model",
+                "required": false,
+                "has_value": config.default_model.is_some(),
+                "input_type": "select",
+                "options": ["llama3.1-8B"],
+                "current_value": config.default_model.as_deref().unwrap_or("llama3.1-8B"),
+            })];
             (configured, fields)
         }
         _ => {

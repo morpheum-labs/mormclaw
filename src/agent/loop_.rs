@@ -366,6 +366,7 @@ pub(crate) struct NonCliApprovalContext {
 
 tokio::task_local! {
     static TOOL_LOOP_NON_CLI_APPROVAL_CONTEXT: Option<NonCliApprovalContext>;
+    static TOOL_LOOP_EXECUTION_POLICY: Option<std::sync::Arc<dyn mormos_plugin_registry::ExecutionPolicy>>;
     static LOOP_DETECTION_CONFIG: LoopDetectionConfig;
     static SAFETY_HEARTBEAT_CONFIG: Option<SafetyHeartbeatConfig>;
     static TOOL_LOOP_PROGRESS_MODE: ProgressMode;
@@ -1099,46 +1100,50 @@ pub(crate) async fn run_tool_call_loop_with_non_cli_approval_context(
     progress_mode: ProgressMode,
     safety_heartbeat: Option<SafetyHeartbeatConfig>,
     canary_tokens_enabled: bool,
+    execution_policy: Option<std::sync::Arc<dyn mormos_plugin_registry::ExecutionPolicy>>,
 ) -> Result<String> {
     let reply_target = non_cli_approval_context
         .as_ref()
         .map(|ctx| ctx.reply_target.clone());
 
-    TOOL_LOOP_PROGRESS_MODE
-        .scope(
-            progress_mode,
-            SAFETY_HEARTBEAT_CONFIG.scope(
-                safety_heartbeat,
-                TOOL_LOOP_CANARY_TOKENS_ENABLED.scope(
-                    canary_tokens_enabled,
-                    TOOL_LOOP_NON_CLI_APPROVAL_CONTEXT.scope(
-                        non_cli_approval_context,
-                        TOOL_LOOP_REPLY_TARGET.scope(
-                            reply_target,
-                            run_tool_call_loop(
-                                provider,
-                                history,
-                                tools_registry,
-                                observer,
-                                provider_name,
-                                model,
-                                temperature,
-                                silent,
-                                approval,
-                                channel_name,
-                                multimodal_config,
-                                max_tool_iterations,
-                                cancellation_token,
-                                on_delta,
-                                hooks,
-                                excluded_tools,
-                            ),
+    let inner = TOOL_LOOP_PROGRESS_MODE.scope(
+        progress_mode,
+        SAFETY_HEARTBEAT_CONFIG.scope(
+            safety_heartbeat,
+            TOOL_LOOP_CANARY_TOKENS_ENABLED.scope(
+                canary_tokens_enabled,
+                TOOL_LOOP_NON_CLI_APPROVAL_CONTEXT.scope(
+                    non_cli_approval_context,
+                    TOOL_LOOP_REPLY_TARGET.scope(
+                        reply_target,
+                        run_tool_call_loop(
+                            provider,
+                            history,
+                            tools_registry,
+                            observer,
+                            provider_name,
+                            model,
+                            temperature,
+                            silent,
+                            approval,
+                            channel_name,
+                            multimodal_config,
+                            max_tool_iterations,
+                            cancellation_token,
+                            on_delta,
+                            hooks,
+                            excluded_tools,
                         ),
                     ),
                 ),
             ),
-        )
-        .await
+        ),
+    );
+
+    match execution_policy {
+        Some(policy) => TOOL_LOOP_EXECUTION_POLICY.scope(Some(policy), inner).await,
+        None => inner.await,
+    }
 }
 
 // ── Agent Tool-Call Loop ──────────────────────────────────────────────────
@@ -2108,6 +2113,75 @@ pub async fn run_tool_call_loop(
                 continue;
             }
 
+            // ── Execution policy (plugin slot) ─────────────────────
+            if let Ok(Some(policy)) =
+                TOOL_LOOP_EXECUTION_POLICY.try_with(std::clone::Clone::clone)
+            {
+                match policy.can_execute_tool(&tool_name, &tool_args).await {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        let blocked =
+                            format!("Tool '{tool_name}' blocked by execution policy.");
+                        runtime_trace::record_event(
+                            "tool_call_result",
+                            Some(channel_name),
+                            Some(provider_name),
+                            Some(active_model.as_str()),
+                            Some(&turn_id),
+                            Some(false),
+                            Some(&blocked),
+                            serde_json::json!({
+                                "iteration": iteration + 1,
+                                "tool": tool_name.clone(),
+                                "arguments": scrub_credentials(&tool_args.to_string()),
+                                "blocked_by_execution_policy": true,
+                            }),
+                        );
+                        ordered_results[idx] = Some((
+                            tool_name.clone(),
+                            call.tool_call_id.clone(),
+                            ToolExecutionOutcome {
+                                output: blocked.clone(),
+                                success: false,
+                                error_reason: Some(blocked),
+                                duration: Duration::ZERO,
+                            },
+                        ));
+                        continue;
+                    }
+                    Err(e) => {
+                        let blocked =
+                            format!("Execution policy error: {e}");
+                        runtime_trace::record_event(
+                            "tool_call_result",
+                            Some(channel_name),
+                            Some(provider_name),
+                            Some(active_model.as_str()),
+                            Some(&turn_id),
+                            Some(false),
+                            Some(&blocked),
+                            serde_json::json!({
+                                "iteration": iteration + 1,
+                                "tool": tool_name.clone(),
+                                "arguments": scrub_credentials(&tool_args.to_string()),
+                                "blocked_by_execution_policy": true,
+                            }),
+                        );
+                        ordered_results[idx] = Some((
+                            tool_name.clone(),
+                            call.tool_call_id.clone(),
+                            ToolExecutionOutcome {
+                                output: blocked.clone(),
+                                success: false,
+                                error_reason: Some(blocked),
+                                duration: Duration::ZERO,
+                            },
+                        ));
+                        continue;
+                    }
+                }
+            }
+
             // ── Approval hook ────────────────────────────────
             if let Some(mgr) = approval {
                 let non_cli_session_granted =
@@ -2935,6 +3009,27 @@ pub async fn run(
     };
     let channel_name = if interactive { "cli" } else { "daemon" };
 
+    // ── Execution policy (plugin slot for tool-call gating) ───────
+    let subagents_policy_for_run = crate::context_engine::SubagentsPolicyConfig {
+        allowed_agents: config.agent.subagents.allowed_agents.clone(),
+        denied_agents: config.agent.subagents.denied_agents.clone(),
+    };
+    let execution_policy_config = crate::context_engine::ExecutionPolicyConfig {
+        allowed_tools: config.agent.allowed_tools.clone(),
+        denied_tools: config.agent.denied_tools.clone(),
+    };
+    let registry_for_run = create_registry_from_config(
+        config.memory.min_relevance_score,
+        config.agent.compact_context,
+        config.plugins.slots.context_engine.as_deref(),
+        config.config_path.parent(),
+        config.plugins.slots.subagent_spawner.as_deref(),
+        Some(&subagents_policy_for_run),
+        config.plugins.slots.execution_policy.as_deref(),
+        Some(&execution_policy_config),
+    );
+    let execution_policy = registry_for_run.get_execution_policy();
+
     // ── Execute ──────────────────────────────────────────────────
     let start = Instant::now();
     let cost_enforcement_context =
@@ -2985,37 +3080,41 @@ pub async fn run(
         } else {
             None
         };
-        let response = scope_cost_enforcement_context(
-            cost_enforcement_context.clone(),
-            SAFETY_HEARTBEAT_CONFIG.scope(
-                hb_cfg,
-                LOOP_DETECTION_CONFIG.scope(
-                    ld_cfg,
-                    TOOL_LOOP_CANARY_TOKENS_ENABLED.scope(
-                        config.security.canary_tokens,
-                        run_tool_call_loop(
-                            provider.as_ref(),
-                            &mut history,
-                            &tools_registry,
-                            observer.as_ref(),
-                            provider_name,
-                            &model_name,
-                            temperature,
-                            false,
-                            approval_manager.as_ref(),
-                            channel_name,
-                            &config.multimodal,
-                            config.agent.max_tool_iterations,
-                            None,
-                            None,
-                            effective_hooks,
-                            &[],
+        let response = TOOL_LOOP_EXECUTION_POLICY
+            .scope(
+                execution_policy,
+                scope_cost_enforcement_context(
+                    cost_enforcement_context.clone(),
+                    SAFETY_HEARTBEAT_CONFIG.scope(
+                        hb_cfg,
+                        LOOP_DETECTION_CONFIG.scope(
+                            ld_cfg,
+                            TOOL_LOOP_CANARY_TOKENS_ENABLED.scope(
+                                config.security.canary_tokens,
+                                run_tool_call_loop(
+                                    provider.as_ref(),
+                                    &mut history,
+                                    &tools_registry,
+                                    observer.as_ref(),
+                                    provider_name,
+                                    &model_name,
+                                    temperature,
+                                    false,
+                                    approval_manager.as_ref(),
+                                    channel_name,
+                                    &config.multimodal,
+                                    config.agent.max_tool_iterations,
+                                    None,
+                                    None,
+                                    effective_hooks,
+                                    &[],
+                                ),
+                            ),
                         ),
                     ),
                 ),
-            ),
-        )
-        .await?;
+            )
+            .await?;
         final_output = response.clone();
         if config.memory.auto_save && response.chars().count() >= AUTOSAVE_MIN_MESSAGE_CHARS {
             let assistant_key = autosave_memory_key("assistant_resp");
@@ -3214,37 +3313,41 @@ pub async fn run(
             } else {
                 None
             };
-            let response = match scope_cost_enforcement_context(
-                cost_enforcement_context.clone(),
-                SAFETY_HEARTBEAT_CONFIG.scope(
-                    hb_cfg,
-                    LOOP_DETECTION_CONFIG.scope(
-                        ld_cfg,
-                        TOOL_LOOP_CANARY_TOKENS_ENABLED.scope(
-                            config.security.canary_tokens,
-                            run_tool_call_loop(
-                                provider.as_ref(),
-                                &mut history,
-                                &tools_registry,
-                                observer.as_ref(),
-                                provider_name,
-                                &model_name,
-                                temperature,
-                                false,
-                                approval_manager.as_ref(),
-                                channel_name,
-                                &config.multimodal,
-                                config.agent.max_tool_iterations,
-                                None,
-                                None,
-                                effective_hooks,
-                                &[],
+            let response = match TOOL_LOOP_EXECUTION_POLICY
+                .scope(
+                    execution_policy.clone(),
+                    scope_cost_enforcement_context(
+                        cost_enforcement_context.clone(),
+                        SAFETY_HEARTBEAT_CONFIG.scope(
+                            hb_cfg,
+                            LOOP_DETECTION_CONFIG.scope(
+                                ld_cfg,
+                                TOOL_LOOP_CANARY_TOKENS_ENABLED.scope(
+                                    config.security.canary_tokens,
+                                    run_tool_call_loop(
+                                        provider.as_ref(),
+                                        &mut history,
+                                        &tools_registry,
+                                        observer.as_ref(),
+                                        provider_name,
+                                        &model_name,
+                                        temperature,
+                                        false,
+                                        approval_manager.as_ref(),
+                                        channel_name,
+                                        &config.multimodal,
+                                        config.agent.max_tool_iterations,
+                                        None,
+                                        None,
+                                        effective_hooks,
+                                        &[],
+                                    ),
+                                ),
                             ),
                         ),
                     ),
-                ),
-            )
-            .await
+                )
+                .await
             {
                 Ok(resp) => resp,
                 Err(e) => {
@@ -3318,16 +3421,27 @@ pub async fn run(
             // compaction must fall back to its own flush_durable_facts.
             let post_turn_active =
                 config.memory.auto_save && !turn_buffer.needs_compaction_fallback();
+            let subagents_policy = crate::context_engine::SubagentsPolicyConfig {
+                allowed_agents: config.agent.subagents.allowed_agents.clone(),
+                denied_agents: config.agent.subagents.denied_agents.clone(),
+            };
+            let execution_policy_config = crate::context_engine::ExecutionPolicyConfig {
+                allowed_tools: config.agent.allowed_tools.clone(),
+                denied_tools: config.agent.denied_tools.clone(),
+            };
             let registry = create_registry_from_config(
                 config.memory.min_relevance_score,
                 config.agent.compact_context,
                 config.plugins.slots.context_engine.as_deref(),
+                config.config_path.parent(),
+                config.plugins.slots.subagent_spawner.as_deref(),
+                Some(&subagents_policy),
+                config.plugins.slots.execution_policy.as_deref(),
+                Some(&execution_policy_config),
             );
             let engine = registry.get_context_engine();
-            let run_session = mormos_plugin_registry::Session::new(
-                uuid::Uuid::new_v4().to_string(),
-                "cli",
-            );
+            let run_session =
+                mormos_plugin_registry::Session::new(uuid::Uuid::new_v4().to_string(), "cli");
             if let Ok((compacted, flush_ok)) = auto_compact_history(
                 &mut history,
                 provider.as_ref(),
@@ -3482,16 +3596,26 @@ pub async fn process_message_with_session(
         .collect();
 
     // ── ContextEngine registry (OpenClaw-style slot-based lifecycle) ──
+    let subagents_policy = crate::context_engine::SubagentsPolicyConfig {
+        allowed_agents: config.agent.subagents.allowed_agents.clone(),
+        denied_agents: config.agent.subagents.denied_agents.clone(),
+    };
+    let execution_policy_config = crate::context_engine::ExecutionPolicyConfig {
+        allowed_tools: config.agent.allowed_tools.clone(),
+        denied_tools: config.agent.denied_tools.clone(),
+    };
     let registry = create_registry_from_config(
         config.memory.min_relevance_score,
         config.agent.compact_context,
         config.plugins.slots.context_engine.as_deref(),
+        config.config_path.parent(),
+        config.plugins.slots.subagent_spawner.as_deref(),
+        Some(&subagents_policy),
+        config.plugins.slots.execution_policy.as_deref(),
+        Some(&execution_policy_config),
     );
     let engine = registry.get_context_engine();
-    let mut session = mormos_plugin_registry::Session::new(
-        Uuid::new_v4().to_string(),
-        "cli",
-    );
+    let mut session = mormos_plugin_registry::Session::new(Uuid::new_v4().to_string(), "cli");
     session.session_id = session_id.map(|s| s.to_string());
     let mut turn = mormos_plugin_registry::Turn::new(message);
     if let Some(ref eng) = engine {
@@ -3616,25 +3740,30 @@ pub async fn process_message_with_session(
     } else {
         None
     };
-    let response = scope_cost_enforcement_context(
-        cost_enforcement_context,
-        SAFETY_HEARTBEAT_CONFIG.scope(
-            hb_cfg,
-            agent_turn(
-                provider.as_ref(),
-                &mut history,
-                &tools_registry,
-                observer.as_ref(),
-                provider_name,
-                &model_name,
-                config.default_temperature,
-                true,
-                &config.multimodal,
-                config.agent.max_tool_iterations,
+    let execution_policy = registry.get_execution_policy();
+    let response = TOOL_LOOP_EXECUTION_POLICY
+        .scope(
+            execution_policy,
+            scope_cost_enforcement_context(
+                cost_enforcement_context,
+                SAFETY_HEARTBEAT_CONFIG.scope(
+                    hb_cfg,
+                    agent_turn(
+                        provider.as_ref(),
+                        &mut history,
+                        &tools_registry,
+                        observer.as_ref(),
+                        provider_name,
+                        &model_name,
+                        config.default_temperature,
+                        true,
+                        &config.multimodal,
+                        config.agent.max_tool_iterations,
+                    ),
+                ),
             ),
-        ),
-    )
-    .await?;
+        )
+        .await?;
 
     // ── ContextEngine after_turn hook ──
     if let Some(ref eng) = engine {

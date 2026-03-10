@@ -1,0 +1,25 @@
+package zeroclaw:execution-policy@1.0.0;
+
+/// Request to check whether a tool call is allowed.
+record can-execute-tool-request {
+  tool-name: string,
+  args: string,
+}
+
+/// Result of can_execute_tool.
+record can-execute-tool-result {
+  allowed: bool,
+  error: option<string>,
+}
+
+/// Execution policy interface — tool execution gate.
+/// Host invokes via WASI stdio: JSON over stdin/stdout.
+/// See docs/design/context-engine-plugin-registry.md for protocol details.
+interface execution-policy {
+  /// Check whether a tool call is allowed. Return allowed=true to permit, false to deny.
+  can-execute-tool: func(request: can-execute-tool-request) -> can-execute-tool-result;
+}
+
+world execution-policy-plugin {
+  export execution-policy;
+}

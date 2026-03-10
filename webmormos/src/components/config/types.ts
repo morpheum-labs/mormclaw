@@ -13,6 +13,8 @@ export interface FieldDef {
   label: string;
   type: FieldType;
   description?: string;
+  /** When set, use t(labelKey) for display instead of label. */
+  labelKey?: string;
   sensitive?: boolean;
   defaultValue?: unknown;
   options?: { value: string; label: string }[];
@@ -25,6 +27,8 @@ export interface FieldDef {
 export interface SectionDef {
   path: string;
   title: string;
+  /** When set, use t(titleKey) for display instead of title. */
+  titleKey?: string;
   description?: string;
   icon: LucideIcon;
   fields: FieldDef[];

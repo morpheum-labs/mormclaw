@@ -40,6 +40,7 @@ pub struct SubAgentSpawnTool {
     load_tracker: AgentLoadTracker,
     runtime_config_path: Option<PathBuf>,
     context_engine: Option<Arc<dyn mormos_plugin_registry::ContextEngine>>,
+    subagent_spawner: Option<Arc<dyn mormos_plugin_registry::SubagentSpawner>>,
 }
 
 impl SubAgentSpawnTool {
@@ -74,6 +75,7 @@ impl SubAgentSpawnTool {
             load_tracker: AgentLoadTracker::new(),
             runtime_config_path,
             context_engine: None,
+            subagent_spawner: None,
         }
     }
 
@@ -83,6 +85,15 @@ impl SubAgentSpawnTool {
         engine: Option<Arc<dyn mormos_plugin_registry::ContextEngine>>,
     ) -> Self {
         self.context_engine = engine;
+        self
+    }
+
+    /// Set the SubagentSpawner for can_spawn policy gate (Phase 3).
+    pub fn with_subagent_spawner(
+        mut self,
+        spawner: Option<Arc<dyn mormos_plugin_registry::SubagentSpawner>>,
+    ) -> Self {
+        self.subagent_spawner = spawner;
         self
     }
 
@@ -319,6 +330,34 @@ impl Tool for SubAgentSpawnTool {
             format!("[Context]\n{context}\n\n[Task]\n{task}")
         };
 
+        let spawn_request = mormos_plugin_registry::SpawnRequest {
+            agent_id: agent_name.clone(),
+            command: full_prompt.clone(),
+        };
+
+        // SubagentSpawner can_spawn policy gate (Phase 3)
+        if let Some(ref spawner) = self.subagent_spawner {
+            match spawner.can_spawn(&spawn_request).await {
+                Ok(true) => {}
+                Ok(false) => {
+                    return Ok(ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some(
+                            "Sub-agent spawn denied by policy (subagentSpawner.can_spawn)".into(),
+                        ),
+                    });
+                }
+                Err(e) => {
+                    return Ok(ToolResult {
+                        success: false,
+                        output: String::new(),
+                        error: Some(format!("Sub-agent spawn policy check failed: {e}")),
+                    });
+                }
+            }
+        }
+
         let session_id = uuid::Uuid::new_v4().to_string();
         let agent_name_owned = agent_name.clone();
         let task_owned = task.to_string();
@@ -331,11 +370,7 @@ impl Tool for SubAgentSpawnTool {
 
         // ContextEngine prepare_subagent_spawn hook
         if let Some(ref engine) = self.context_engine {
-            let req = mormos_plugin_registry::SpawnRequest {
-                agent_id: agent_name_owned.clone(),
-                command: full_prompt.clone(),
-            };
-            if let Err(e) = engine.prepare_subagent_spawn(&req).await {
+            if let Err(e) = engine.prepare_subagent_spawn(&spawn_request).await {
                 tracing::warn!(%e, "ContextEngine prepare_subagent_spawn failed; continuing");
             }
         }

@@ -8,5 +8,8 @@
 pub mod lifecycle;
 pub mod registry;
 
-pub use lifecycle::{Context, ContextEngine, Session, SpawnRequest, SubagentResult, Turn};
+pub use lifecycle::{
+    Context, ContextEngine, ExecutionPolicy, Session, SpawnRequest, SubagentResult,
+    SubagentSpawner, Turn,
+};
 pub use registry::{Plugin, PluginRegistry, Slot};

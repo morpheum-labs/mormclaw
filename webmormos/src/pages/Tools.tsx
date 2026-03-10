@@ -6,9 +6,30 @@ import {
   ChevronRight,
   Terminal,
   Package,
+  ShieldCheck,
+  ShieldX,
 } from 'lucide-react';
+import { parse } from 'smol-toml';
 import type { ToolSpec, CliTool } from '@/types/api';
-import { getTools, getCliTools } from '@/lib/api';
+import { getTools, getCliTools, getConfig } from '@/lib/api';
+
+function getToolPolicyFromConfig(configToml: string): {
+  allowedTools: string[];
+  deniedTools: string[];
+  executionPolicy: string;
+} {
+  try {
+    const obj = parse(configToml) as Record<string, unknown>;
+    const agent = obj?.agent as Record<string, unknown> | undefined;
+    const slots = (obj?.plugins as Record<string, unknown>)?.slots as Record<string, unknown> | undefined;
+    const allowedTools = (agent?.allowed_tools as string[] | undefined) ?? [];
+    const deniedTools = (agent?.denied_tools as string[] | undefined) ?? [];
+    const executionPolicy = (slots?.executionPolicy as string | undefined) ?? '';
+    return { allowedTools, deniedTools, executionPolicy };
+  } catch {
+    return { allowedTools: [], deniedTools: [], executionPolicy: '' };
+  }
+}
 
 export default function Tools() {
   const [tools, setTools] = useState<ToolSpec[]>([]);
@@ -17,6 +38,11 @@ export default function Tools() {
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [toolPolicy, setToolPolicy] = useState<{
+    allowedTools: string[];
+    deniedTools: string[];
+    executionPolicy: string;
+  }>({ allowedTools: [], deniedTools: [], executionPolicy: '' });
 
   useEffect(() => {
     Promise.all([getTools(), getCliTools()])
@@ -26,6 +52,10 @@ export default function Tools() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+
+    getConfig()
+      .then((config) => setToolPolicy(getToolPolicyFromConfig(config)))
+      .catch(() => {});
   }, []);
 
   const filtered = tools.filter(
@@ -74,11 +104,23 @@ export default function Tools() {
 
       {/* Agent Tools Grid */}
       <div>
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex flex-wrap items-center gap-2 mb-4">
           <Wrench className="h-5 w-5 text-blue-400" />
           <h2 className="text-base font-semibold text-white">
             Agent Tools ({filtered.length})
           </h2>
+          {toolPolicy.executionPolicy === 'mormos-allowlist' && toolPolicy.allowedTools.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-900/50 text-amber-300 border border-amber-700/50">
+              <ShieldCheck className="h-3 w-3" />
+              Allowlist ({toolPolicy.allowedTools.length} tools)
+            </span>
+          )}
+          {toolPolicy.executionPolicy === 'mormos-allowlist' && toolPolicy.deniedTools.length > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-900/30 text-red-300 border border-red-700/50">
+              <ShieldX className="h-3 w-3" />
+              Denylist ({toolPolicy.deniedTools.length} tools)
+            </span>
+          )}
         </div>
 
         {filtered.length === 0 ? (
@@ -104,6 +146,17 @@ export default function Tools() {
                         <h3 className="text-sm font-semibold text-white truncate">
                           {tool.name}
                         </h3>
+                        {toolPolicy.executionPolicy === 'mormos-allowlist' &&
+                          toolPolicy.allowedTools.length > 0 &&
+                          toolPolicy.allowedTools.includes(tool.name) && (
+                            <span
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-900/50 text-emerald-300 border border-emerald-700/50 flex-shrink-0"
+                              title="In allowlist"
+                            >
+                              <ShieldCheck className="h-2.5 w-2.5" />
+                              Allowed
+                            </span>
+                          )}
                       </div>
                       {isExpanded ? (
                         <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />

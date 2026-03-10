@@ -18,8 +18,8 @@
 
 pub mod anthropic;
 pub mod backoff;
-pub mod chatjimmy;
 pub mod bedrock;
+pub mod chatjimmy;
 pub mod compatible;
 pub mod copilot;
 pub mod cursor;
@@ -1230,10 +1230,9 @@ fn create_provider_with_url_and_options(
             key,
             options.reasoning_enabled,
         ))),
-        "chatjimmy" | "chatjimmy-cli" => Ok(Box::new(chatjimmy::ChatJimmyProvider::new(
-            api_url,
-            key,
-        ))),
+        "chatjimmy" | "chatjimmy-cli" => {
+            Ok(Box::new(chatjimmy::ChatJimmyProvider::new(api_url, key)))
+        }
         "gemini" | "google" | "google-gemini" => {
             let state_dir = options.zeroclaw_dir.clone().unwrap_or_else(|| {
                 directories::UserDirs::new().map_or_else(

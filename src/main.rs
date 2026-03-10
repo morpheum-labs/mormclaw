@@ -146,6 +146,7 @@ mod approval;
 mod auth;
 mod channels;
 mod config;
+mod context_engine;
 mod coordination;
 mod cost;
 mod cron;
@@ -2026,7 +2027,10 @@ async fn handle_pairing_command(pairing_command: PairingCommands, _config: &Conf
                 println!("     Enter this code on the pairing screen to connect.");
                 println!();
             } else {
-                let err = body.get("error").and_then(|v| v.as_str()).unwrap_or("Unknown error");
+                let err = body
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown error");
                 bail!("{err}");
             }
         }

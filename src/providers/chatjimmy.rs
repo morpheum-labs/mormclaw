@@ -111,7 +111,11 @@ impl ChatJimmyProvider {
         if !status.is_success() {
             let raw = String::from_utf8_lossy(&body_bytes);
             let sanitized = super::sanitize_api_error(&raw);
-            tracing::error!("ChatJimmy error: status={} body_excerpt={}", status, sanitized);
+            tracing::error!(
+                "ChatJimmy error: status={} body_excerpt={}",
+                status,
+                sanitized
+            );
             anyhow::bail!("ChatJimmy API error ({}): {}", status, sanitized);
         }
 
@@ -156,12 +160,8 @@ impl Provider for ChatJimmyProvider {
             content: message.to_string(),
         }];
 
-        self.send_chat_request(
-            messages,
-            model,
-            system_prompt.unwrap_or(""),
-        )
-        .await
+        self.send_chat_request(messages, model, system_prompt.unwrap_or(""))
+            .await
     }
 
     async fn chat_with_history(
@@ -192,17 +192,21 @@ impl Provider for ChatJimmyProvider {
             .collect();
 
         if chat_messages.is_empty() {
-            return self.chat_with_system(
-                if system.is_empty() { None } else { Some(system) },
-                "",
-                model,
-                temperature,
-            )
-            .await;
+            return self
+                .chat_with_system(
+                    if system.is_empty() {
+                        None
+                    } else {
+                        Some(system)
+                    },
+                    "",
+                    model,
+                    temperature,
+                )
+                .await;
         }
 
-        self.send_chat_request(chat_messages, model, system)
-            .await
+        self.send_chat_request(chat_messages, model, system).await
     }
 }
 

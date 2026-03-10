@@ -143,6 +143,15 @@ const translations: Record<Locale, Record<string, string>> = {
     'config.error': 'Failed to save configuration.',
     'config.loading': 'Loading configuration...',
     'config.editor_placeholder': 'TOML configuration...',
+    'config.section_agent_subagents': 'Agent: Subagents',
+    'config.section_plugins_slots': 'Plugins: Slots',
+    'config.field_allowed_tools': 'Allowed Tools',
+    'config.field_denied_tools': 'Denied Tools',
+    'config.field_allowed_agents': 'Allowed Agents',
+    'config.field_denied_agents': 'Denied Agents',
+    'config.field_context_engine': 'Context Engine',
+    'config.field_subagent_spawner': 'Subagent Spawner',
+    'config.field_execution_policy': 'Execution Policy',
 
     // Cost
     'cost.title': 'Cost Tracker',
@@ -337,6 +346,15 @@ const translations: Record<Locale, Record<string, string>> = {
     'config.error': 'Yapilandirma kaydedilemedi.',
     'config.loading': 'Yapilandirma yukleniyor...',
     'config.editor_placeholder': 'TOML yapilandirmasi...',
+    'config.section_agent_subagents': 'Ajan: Alt Ajanslar',
+    'config.section_plugins_slots': 'Eklentiler: Yuvalar',
+    'config.field_allowed_tools': 'Izin Verilen Araclar',
+    'config.field_denied_tools': 'Yasakli Araclar',
+    'config.field_allowed_agents': 'Izin Verilen Ajanlar',
+    'config.field_denied_agents': 'Yasakli Ajanlar',
+    'config.field_context_engine': 'Baglam Motoru',
+    'config.field_subagent_spawner': 'Alt Ajan Baslatici',
+    'config.field_execution_policy': 'Calistirma Politikasi',
 
     // Cost
     'cost.title': 'Maliyet Takibi',
@@ -521,6 +539,15 @@ const translations: Record<Locale, Record<string, string>> = {
     'config.error': '配置保存失败。',
     'config.loading': '配置加载中...',
     'config.editor_placeholder': 'TOML 配置...',
+    'config.section_agent_subagents': '智能体：子智能体',
+    'config.section_plugins_slots': '插件：插槽',
+    'config.field_allowed_tools': '允许的工具',
+    'config.field_denied_tools': '禁止的工具',
+    'config.field_allowed_agents': '允许的智能体',
+    'config.field_denied_agents': '禁止的智能体',
+    'config.field_context_engine': '上下文引擎',
+    'config.field_subagent_spawner': '子智能体生成器',
+    'config.field_execution_policy': '执行策略',
 
     // Cost
     'cost.title': '成本追踪',

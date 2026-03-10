@@ -1,0 +1,76 @@
+package zeroclaw:context-engine@1.0.0;
+
+/// Session-scoped state passed to bootstrap and across a conversation.
+record session {
+  id: string,
+  channel: string,
+  session-id: option<string>,
+}
+
+/// Single turn: raw input and (after execution) output.
+record turn {
+  input: string,
+  output: option<string>,
+}
+
+/// Assembled context: memory preamble, hardware RAG, enriched prompt.
+/// When compacting, compact-transcript and compact-summary are set.
+record context {
+  mem-context: string,
+  hw-context: string,
+  enriched-prompt: string,
+  compact-transcript: option<string>,
+  compact-summary: option<string>,
+}
+
+/// Request to spawn a sub-agent.
+record spawn-request {
+  agent-id: string,
+  command: string,
+}
+
+/// Result of a completed sub-agent run.
+record subagent-result {
+  session-id: string,
+  success: bool,
+  output: string,
+}
+
+/// Result of a hook invocation. Mutated fields are returned when applicable.
+record hook-result {
+  ok: bool,
+  error: option<string>,
+  session: option<session>,
+  turn: option<turn>,
+  context: option<context>,
+}
+
+/// Context engine interface — seven lifecycle hooks.
+/// Host invokes via WASI stdio: JSON over stdin/stdout.
+/// See docs/design/context-engine-plugin-registry.md for protocol details.
+interface context-engine {
+  /// Called at session start. Initialize session-scoped state.
+  bootstrap: func(session: session) -> hook-result;
+
+  /// Ingest raw input (user message). Store, preprocess, enrich.
+  ingest: func(session: session, turn: turn) -> hook-result;
+
+  /// Assemble context: memory retrieval, RAG, prompt building.
+  assemble: func(session: session, context: context) -> hook-result;
+
+  /// Compact history: prune, summarize, flush durable facts to memory.
+  compact: func(session: session, context: context) -> hook-result;
+
+  /// After turn completes. Persist, extract facts, update state.
+  after-turn: func(session: session, turn: turn) -> hook-result;
+
+  /// Before spawning a sub-agent. Validate, inject context, set budget.
+  prepare-subagent-spawn: func(request: spawn-request) -> hook-result;
+
+  /// When a sub-agent finishes. Merge result, update registry.
+  on-subagent-ended: func(result: subagent-result) -> hook-result;
+}
+
+world context-engine-plugin {
+  export context-engine;
+}

@@ -190,10 +190,8 @@ pub(super) async fn auto_compact_history(
     };
     // ContextEngine compact hook: engine can modify summary before apply
     let final_summary = if let (Some(ref engine), Some(sess)) = (context_engine.as_ref(), session) {
-        let mut ctx = mormos_plugin_registry::Context::for_compact(
-            transcript.clone(),
-            summary.clone(),
-        );
+        let mut ctx =
+            mormos_plugin_registry::Context::for_compact(transcript.clone(), summary.clone());
         if let Err(e) = engine.compact(sess, &mut ctx).await {
             tracing::warn!(%e, "ContextEngine compact failed; using default summary");
             summary

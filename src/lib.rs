@@ -75,11 +75,11 @@ use clap::Subcommand;
 use serde::{Deserialize, Serialize};
 
 pub mod agent;
-pub(crate) mod context_engine;
 pub(crate) mod approval;
 pub(crate) mod auth;
 pub mod channels;
 pub mod config;
+pub(crate) mod context_engine;
 pub mod coordination;
 pub(crate) mod cost;
 pub(crate) mod cron;
