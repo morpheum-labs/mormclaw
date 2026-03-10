@@ -11,7 +11,7 @@ mod wasm_spawner;
 #[allow(unused_imports)]
 pub use default::{
     create_default_registry, create_registry_from_config, DefaultContextEngine,
-    DefaultExecutionPolicy, ExecutionPolicyConfig, DefaultSubagentSpawner, SubagentsPolicyConfig,
+    DefaultExecutionPolicy, DefaultSubagentSpawner, ExecutionPolicyConfig, SubagentsPolicyConfig,
 };
 #[allow(unused_imports)]
 pub use mormos_plugin_registry::{

@@ -3331,7 +3331,7 @@ pub struct PluginsConfig {
 }
 
 /// Slot-to-plugin bindings. Mirrors OpenClaw's `plugins.slots`.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct PluginSlotsConfig {
     /// Context engine plugin ID: "mormos-legacy" or "wasm:path/to/plugin.wasm".
     /// When unset, the default legacy engine is used.
@@ -3343,16 +3343,6 @@ pub struct PluginSlotsConfig {
     /// Execution policy plugin ID (e.g. "mormos-default"). Policy gate for tool execution.
     #[serde(default, rename = "executionPolicy")]
     pub execution_policy: Option<String>,
-}
-
-impl Default for PluginSlotsConfig {
-    fn default() -> Self {
-        Self {
-            context_engine: None,
-            subagent_spawner: None,
-            execution_policy: None,
-        }
-    }
 }
 
 fn default_plugins_enabled() -> bool {
@@ -8864,12 +8854,12 @@ impl Config {
             }
         }
 
-        for left_index in 0..custom_auth_headers_by_base_url.len() {
-            let (left_profile, left_url, left_header) =
-                &custom_auth_headers_by_base_url[left_index];
-            for right_index in (left_index + 1)..custom_auth_headers_by_base_url.len() {
-                let (right_profile, right_url, right_header) =
-                    &custom_auth_headers_by_base_url[right_index];
+        for (left_index, (left_profile, left_url, left_header)) in
+            custom_auth_headers_by_base_url.iter().enumerate()
+        {
+            for (right_profile, right_url, right_header) in
+                custom_auth_headers_by_base_url.iter().skip(left_index + 1)
+            {
                 if Self::urls_match_ignoring_trailing_slash(left_url, right_url)
                     && !left_header.eq_ignore_ascii_case(right_header)
                 {

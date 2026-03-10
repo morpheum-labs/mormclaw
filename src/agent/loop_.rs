@@ -2114,14 +2114,12 @@ pub async fn run_tool_call_loop(
             }
 
             // ── Execution policy (plugin slot) ─────────────────────
-            if let Ok(Some(policy)) =
-                TOOL_LOOP_EXECUTION_POLICY.try_with(std::clone::Clone::clone)
+            if let Ok(Some(policy)) = TOOL_LOOP_EXECUTION_POLICY.try_with(std::clone::Clone::clone)
             {
                 match policy.can_execute_tool(&tool_name, &tool_args).await {
                     Ok(true) => {}
                     Ok(false) => {
-                        let blocked =
-                            format!("Tool '{tool_name}' blocked by execution policy.");
+                        let blocked = format!("Tool '{tool_name}' blocked by execution policy.");
                         runtime_trace::record_event(
                             "tool_call_result",
                             Some(channel_name),
@@ -2150,8 +2148,7 @@ pub async fn run_tool_call_loop(
                         continue;
                     }
                     Err(e) => {
-                        let blocked =
-                            format!("Execution policy error: {e}");
+                        let blocked = format!("Execution policy error: {e}");
                         runtime_trace::record_event(
                             "tool_call_result",
                             Some(channel_name),

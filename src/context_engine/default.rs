@@ -85,7 +85,11 @@ pub struct DefaultExecutionPolicy;
 
 #[async_trait]
 impl ExecutionPolicy for DefaultExecutionPolicy {
-    async fn can_execute_tool(&self, _tool_name: &str, _args: &serde_json::Value) -> anyhow::Result<bool> {
+    async fn can_execute_tool(
+        &self,
+        _tool_name: &str,
+        _args: &serde_json::Value,
+    ) -> anyhow::Result<bool> {
         Ok(true)
     }
 }
@@ -104,7 +108,11 @@ impl AllowlistExecutionPolicy {
 
 #[async_trait]
 impl ExecutionPolicy for AllowlistExecutionPolicy {
-    async fn can_execute_tool(&self, tool_name: &str, _args: &serde_json::Value) -> anyhow::Result<bool> {
+    async fn can_execute_tool(
+        &self,
+        tool_name: &str,
+        _args: &serde_json::Value,
+    ) -> anyhow::Result<bool> {
         if self.denied.iter().any(|t| t == tool_name) {
             return Ok(false);
         }

@@ -64,7 +64,10 @@ mod inner {
             Ok(Self { engine, module })
         }
 
-        fn invoke_sync(&self, req: &CanExecuteToolRequest) -> anyhow::Result<CanExecuteToolResponse> {
+        fn invoke_sync(
+            &self,
+            req: &CanExecuteToolRequest,
+        ) -> anyhow::Result<CanExecuteToolResponse> {
             let input_bytes = serde_json::to_vec(req)?;
             let stdout_pipe = MemoryOutputPipe::new(MAX_OUTPUT_BYTES);
             let stdout_for_read = stdout_pipe.clone();

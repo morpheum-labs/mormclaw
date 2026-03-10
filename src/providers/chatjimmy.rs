@@ -65,7 +65,7 @@ impl ChatJimmyProvider {
         const STATS_START: &str = "<|stats|>";
         const STATS_END: &str = "<|/stats|>";
         if let Some(start) = text.rfind(STATS_START) {
-            if text[start..].find(STATS_END).is_some() {
+            if text[start..].contains(STATS_END) {
                 return text[..start].trim_end();
             }
         }
