@@ -50,6 +50,8 @@ impl DefaultContextEngine {
             mem_context,
             hw_context,
             enriched_prompt,
+            compact_transcript: None,
+            compact_summary: None,
         }
     }
 }
@@ -70,8 +72,28 @@ pub fn create_default_registry(
     min_relevance_score: f64,
     compact_context: bool,
 ) -> mormos_plugin_registry::PluginRegistry {
-    let engine = Arc::new(DefaultContextEngine::new(min_relevance_score, compact_context));
+    create_registry_from_config(min_relevance_score, compact_context, None)
+}
+
+/// Factory: create registry from config. Uses `plugins.slots.contextEngine` when set.
+/// Currently only "mormos-legacy" is supported; unknown IDs fall back to legacy.
+pub fn create_registry_from_config(
+    min_relevance_score: f64,
+    compact_context: bool,
+    engine_id: Option<&str>,
+) -> mormos_plugin_registry::PluginRegistry {
+    let id = engine_id.unwrap_or("mormos-legacy");
+    let engine: Arc<dyn mormos_plugin_registry::ContextEngine> = match id {
+        "mormos-legacy" => Arc::new(DefaultContextEngine::new(min_relevance_score, compact_context)),
+        other => {
+            tracing::warn!(
+                engine = %other,
+                "Unknown context engine; falling back to mormos-legacy"
+            );
+            Arc::new(DefaultContextEngine::new(min_relevance_score, compact_context))
+        }
+    };
     let mut registry = mormos_plugin_registry::PluginRegistry::new();
-    registry.register_context_engine("mormos-legacy", engine);
+    registry.register_context_engine(id, engine);
     registry
 }

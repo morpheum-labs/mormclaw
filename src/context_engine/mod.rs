@@ -6,7 +6,7 @@
 mod default;
 
 #[allow(unused_imports)]
-pub use default::{create_default_registry, DefaultContextEngine};
+pub use default::{create_default_registry, create_registry_from_config, DefaultContextEngine};
 #[allow(unused_imports)]
 pub use mormos_plugin_registry::{
     Context, ContextEngine, PluginRegistry, Session, Slot, SpawnRequest, SubagentResult, Turn,

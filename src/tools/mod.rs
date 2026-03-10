@@ -712,6 +712,12 @@ pub fn all_tools_with_runtime(
         }
 
         let subagent_registry = Arc::new(SubAgentRegistry::new());
+        let plugin_registry = crate::context_engine::create_registry_from_config(
+            root_config.memory.min_relevance_score,
+            root_config.agent.compact_context,
+            root_config.plugins.slots.context_engine.as_deref(),
+        );
+        let context_engine = plugin_registry.get_context_engine();
         tool_arcs.push(Arc::new(
             SubAgentSpawnTool::new(
                 all_agents,
@@ -726,6 +732,7 @@ pub fn all_tools_with_runtime(
                 root_config.agent.subagents.auto_activate,
                 runtime_config_path,
             )
+            .with_context_engine(context_engine)
             .with_load_tracker(load_tracker),
         ));
         tool_arcs.push(Arc::new(SubAgentListTool::new(subagent_registry.clone())));

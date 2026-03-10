@@ -81,6 +81,27 @@ Use this board for important notices (breaking changes, security advisories, mai
 - **Fully swappable:** core systems are traits (providers, channels, tools, memory, tunnels).
 - **No lock-in:** OpenAI-compatible provider support + pluggable custom endpoints.
 
+### Extensibility & Plugins
+
+mormOS/ZeroClaw uses a **pluginized Context Engine** with 7 lifecycle hooks (OpenClaw parity):
+
+- `bootstrap` — session init
+- `ingest` — raw input preprocessing
+- `assemble` — memory retrieval, RAG, prompt building
+- `compact` — history pruning and summarization
+- `after_turn` — post-response persistence
+- `prepare_subagent_spawn` — validate before spawning sub-agents
+- `on_subagent_ended` — merge result when sub-agent finishes
+
+Plugins implement `ContextEngine` to control memory, prompt assembly, compaction, and sub-agent flows. Config via `config.toml`:
+
+```toml
+[plugins]
+slots = { contextEngine = "mormos-legacy" }
+```
+
+Current: default `mormos-legacy` engine + WASM foundation in `wit/zeroclaw`. Future: full WASM plugin loading, more slots (MemoryManager, ExecutionPolicy, on-chain wallet).
+
 ## Quick Start
 
 ### Option 0: One-line Installer (Default TUI Onboarding)

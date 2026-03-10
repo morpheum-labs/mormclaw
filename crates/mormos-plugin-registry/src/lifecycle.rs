@@ -58,11 +58,26 @@ pub struct Context {
     pub mem_context: String,
     pub hw_context: String,
     pub enriched_prompt: String,
+    /// When compacting history, the transcript being summarized. Engine can read.
+    pub compact_transcript: Option<String>,
+    /// When compacting history, the summary. Engine can modify before apply.
+    pub compact_summary: Option<String>,
 }
 
 impl Context {
     pub fn full_context(&self) -> String {
         format!("{}{}", self.mem_context, self.hw_context)
+    }
+
+    /// Build a context for the compact hook (history compaction flow).
+    pub fn for_compact(transcript: String, summary: String) -> Self {
+        Self {
+            mem_context: String::new(),
+            hw_context: String::new(),
+            enriched_prompt: String::new(),
+            compact_transcript: Some(transcript),
+            compact_summary: Some(summary),
+        }
     }
 }
 

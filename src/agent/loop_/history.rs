@@ -109,6 +109,8 @@ pub(super) async fn auto_compact_history(
     memory: Option<&dyn Memory>,
     session_id: Option<&str>,
     post_turn_active: bool,
+    context_engine: Option<std::sync::Arc<dyn mormos_plugin_registry::ContextEngine>>,
+    session: Option<&mormos_plugin_registry::Session>,
 ) -> Result<(bool, bool)> {
     let has_system = history.first().map_or(false, |m| m.role == "system");
     let non_system_count = if has_system {
@@ -186,7 +188,22 @@ pub(super) async fn auto_compact_history(
     } else {
         summary
     };
-    apply_compaction_summary(history, start, compact_end, &summary);
+    // ContextEngine compact hook: engine can modify summary before apply
+    let final_summary = if let (Some(ref engine), Some(sess)) = (context_engine.as_ref(), session) {
+        let mut ctx = mormos_plugin_registry::Context::for_compact(
+            transcript.clone(),
+            summary.clone(),
+        );
+        if let Err(e) = engine.compact(sess, &mut ctx).await {
+            tracing::warn!(%e, "ContextEngine compact failed; using default summary");
+            summary
+        } else {
+            ctx.compact_summary.unwrap_or(summary)
+        }
+    } else {
+        summary
+    };
+    apply_compaction_summary(history, start, compact_end, &final_summary);
 
     Ok((true, flush_ok))
 }
@@ -670,6 +687,8 @@ mod tests {
             None,
             None,
             false,
+            None,
+            None,
         )
         .await
         .expect("compaction should succeed");
@@ -867,6 +886,8 @@ mod tests {
             Some(mem.as_ref()),
             None,
             false,
+            None,
+            None,
         )
         .await
         .expect("compaction should succeed");
@@ -1007,6 +1028,8 @@ mod tests {
             Some(mem.as_ref()),
             None,
             false,
+            None,
+            None,
         )
         .await
         .expect("compaction should succeed");
@@ -1686,6 +1709,8 @@ mod tests {
             Some(mem.as_ref()),
             None,
             true, // post_turn_active
+            None,
+            None,
         )
         .await
         .expect("compaction should succeed");

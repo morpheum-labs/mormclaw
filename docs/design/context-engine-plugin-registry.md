@@ -56,15 +56,21 @@ When `contextEngine` is unset, the default legacy engine is used.
 - `src/context_engine/` — DefaultContextEngine, `assemble_impl` helper, `create_default_registry` factory
 - `src/config/schema.rs` — `PluginSlotsConfig`, `plugins.slots.contextEngine`
 
-## Loop wiring (Option B — implemented)
+## Loop wiring (implemented)
 
-`process_message_with_session` now:
-
-1. Creates `PluginRegistry` via `create_default_registry`
+**process_message_with_session:**
+1. Creates `PluginRegistry` via `create_registry_from_config` (reads `plugins.slots.contextEngine`)
 2. Builds `Session` and `Turn`
-3. Calls `engine.bootstrap(&mut session)` and `engine.ingest(&session, &mut turn)` before context assembly
-4. Builds context via `DefaultContextEngine::assemble_impl`, then `engine.assemble(&session, &mut ctx)` for plugin modification
-5. Calls `engine.after_turn(&session, &turn)` after the response
+3. Calls `engine.bootstrap` and `engine.ingest` before context assembly
+4. Builds context via `DefaultContextEngine::assemble_impl`, then `engine.assemble` for plugin modification
+5. Calls `engine.after_turn` after the response
+
+**run() interactive mode:**
+- `auto_compact_history` receives `context_engine` and `session`; calls `engine.compact` before applying summary
+
+**SubAgentSpawnTool:**
+- `prepare_subagent_spawn` called before tokio::spawn
+- `on_subagent_ended` called when sub-agent completes or fails (inside spawn closure)
 
 ## Migration path (zero breaking changes)
 

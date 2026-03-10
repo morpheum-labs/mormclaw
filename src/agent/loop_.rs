@@ -1,7 +1,7 @@
 use crate::approval::{ApprovalManager, ApprovalRequest, ApprovalResponse};
 use crate::config::schema::{CostEnforcementMode, ModelPricing};
 use crate::config::{Config, ProgressMode};
-use crate::context_engine::{create_default_registry, DefaultContextEngine};
+use crate::context_engine::{create_registry_from_config, DefaultContextEngine};
 use crate::cost::{BudgetCheck, CostTracker, UsagePeriod};
 use crate::memory::{self, Memory, MemoryCategory};
 use crate::multimodal;
@@ -3318,6 +3318,16 @@ pub async fn run(
             // compaction must fall back to its own flush_durable_facts.
             let post_turn_active =
                 config.memory.auto_save && !turn_buffer.needs_compaction_fallback();
+            let registry = create_registry_from_config(
+                config.memory.min_relevance_score,
+                config.agent.compact_context,
+                config.plugins.slots.context_engine.as_deref(),
+            );
+            let engine = registry.get_context_engine();
+            let run_session = mormos_plugin_registry::Session::new(
+                uuid::Uuid::new_v4().to_string(),
+                "cli",
+            );
             if let Ok((compacted, flush_ok)) = auto_compact_history(
                 &mut history,
                 provider.as_ref(),
@@ -3327,6 +3337,8 @@ pub async fn run(
                 Some(mem.as_ref()),
                 None,
                 post_turn_active,
+                engine,
+                Some(&run_session),
             )
             .await
             {
@@ -3470,9 +3482,10 @@ pub async fn process_message_with_session(
         .collect();
 
     // ── ContextEngine registry (OpenClaw-style slot-based lifecycle) ──
-    let registry = create_default_registry(
+    let registry = create_registry_from_config(
         config.memory.min_relevance_score,
         config.agent.compact_context,
+        config.plugins.slots.context_engine.as_deref(),
     );
     let engine = registry.get_context_engine();
     let mut session = mormos_plugin_registry::Session::new(

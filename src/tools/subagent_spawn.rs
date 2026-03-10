@@ -39,6 +39,7 @@ pub struct SubAgentSpawnTool {
     subagent_settings: SubAgentsConfig,
     load_tracker: AgentLoadTracker,
     runtime_config_path: Option<PathBuf>,
+    context_engine: Option<Arc<dyn mormos_plugin_registry::ContextEngine>>,
 }
 
 impl SubAgentSpawnTool {
@@ -72,7 +73,17 @@ impl SubAgentSpawnTool {
             subagent_settings,
             load_tracker: AgentLoadTracker::new(),
             runtime_config_path,
+            context_engine: None,
         }
+    }
+
+    /// Set the ContextEngine for prepare_subagent_spawn and on_subagent_ended hooks.
+    pub fn with_context_engine(
+        mut self,
+        engine: Option<Arc<dyn mormos_plugin_registry::ContextEngine>>,
+    ) -> Self {
+        self.context_engine = engine;
+        self
     }
 
     /// Reuse a shared runtime load tracker.
@@ -318,6 +329,17 @@ impl Tool for SubAgentSpawnTool {
         let multimodal_config = self.multimodal_config.clone();
         let mut load_lease = self.load_tracker.start(&agent_name_owned);
 
+        // ContextEngine prepare_subagent_spawn hook
+        if let Some(ref engine) = self.context_engine {
+            let req = mormos_plugin_registry::SpawnRequest {
+                agent_id: agent_name_owned.clone(),
+                command: full_prompt.clone(),
+            };
+            if let Err(e) = engine.prepare_subagent_spawn(&req).await {
+                tracing::warn!(%e, "ContextEngine prepare_subagent_spawn failed; continuing");
+            }
+        }
+
         // Atomically check concurrent limit and register session to prevent race conditions.
         let session = SubAgentSession {
             id: session_id.clone(),
@@ -349,6 +371,7 @@ impl Tool for SubAgentSpawnTool {
         let registry = self.registry.clone();
         let sid = session_id.clone();
         let mut bg_load_lease = load_lease;
+        let context_engine = self.context_engine.clone();
 
         let handle = tokio::spawn(async move {
             let result = if is_agentic {
@@ -369,21 +392,52 @@ impl Tool for SubAgentSpawnTool {
             match result {
                 Ok(tool_result) => {
                     if tool_result.success {
+                        let output = tool_result.output.clone();
                         registry.complete(&sid, tool_result);
                         bg_load_lease.mark_success();
+                        if let Some(ref engine) = context_engine {
+                            let outcome = mormos_plugin_registry::SubagentResult {
+                                session_id: sid.clone(),
+                                success: true,
+                                output,
+                            };
+                            if let Err(e) = engine.on_subagent_ended(&outcome).await {
+                                tracing::warn!(%e, "ContextEngine on_subagent_ended failed");
+                            }
+                        }
                     } else {
-                        registry.fail(
-                            &sid,
-                            tool_result
-                                .error
-                                .unwrap_or_else(|| "Unknown error".to_string()),
-                        );
+                        let err_msg = tool_result
+                            .error
+                            .clone()
+                            .unwrap_or_else(|| "Unknown error".to_string());
+                        registry.fail(&sid, err_msg.clone());
                         bg_load_lease.mark_failure();
+                        if let Some(ref engine) = context_engine {
+                            let outcome = mormos_plugin_registry::SubagentResult {
+                                session_id: sid.clone(),
+                                success: false,
+                                output: err_msg,
+                            };
+                            if let Err(e) = engine.on_subagent_ended(&outcome).await {
+                                tracing::warn!(%e, "ContextEngine on_subagent_ended failed");
+                            }
+                        }
                     }
                 }
                 Err(e) => {
-                    registry.fail(&sid, format!("Agent '{agent_name_owned}' error: {e}"));
+                    let err_msg = format!("Agent '{agent_name_owned}' error: {e}");
+                    registry.fail(&sid, err_msg.clone());
                     bg_load_lease.mark_failure();
+                    if let Some(ref engine) = context_engine {
+                        let outcome = mormos_plugin_registry::SubagentResult {
+                            session_id: sid.clone(),
+                            success: false,
+                            output: err_msg,
+                        };
+                        if let Err(e) = engine.on_subagent_ended(&outcome).await {
+                            tracing::warn!(%e, "ContextEngine on_subagent_ended failed");
+                        }
+                    }
                 }
             }
         });
